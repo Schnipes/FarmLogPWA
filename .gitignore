@@ -1,0 +1,7 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Icons (generate locally, don't commit placeholders)
+icon-192.png
+icon-512.png

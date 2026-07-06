@@ -1,0 +1,380 @@
+:root {
+  --color-text: #111111;
+  --color-bg: #ffffff;
+  --color-primary: #1a8f3c;
+  --color-primary-dark: #146b2d;
+  --color-surface: #f4f4f4;
+  --color-border: #d8d8d8;
+  --color-danger: #b3261e;
+  --color-accent-water: #0072b3;
+  --color-accent-pest: #b3261e;
+  --color-accent-harvest: #a3690b;
+  --color-accent-crop: #1a8f3c;
+  --radius: 12px;
+  --tap-min: 56px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font);
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  padding-bottom: 76px;
+}
+
+button {
+  font-family: var(--font);
+  cursor: pointer;
+}
+
+button:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+input:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* ---------- Header ---------- */
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--color-bg);
+  border-bottom: 2px solid var(--color-border);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.app-header h1 {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.status-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 6px 12px;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  flex-shrink: 0;
+}
+
+/* ---------- Main ---------- */
+main {
+  padding: 16px;
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+section {
+  margin-bottom: 24px;
+}
+
+.section-label {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #555555;
+  margin: 0 0 10px 4px;
+}
+
+/* ---------- Quick action grid ---------- */
+.quick-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.action-btn {
+  min-height: 120px;
+  border-radius: var(--radius);
+  border: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 8px;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: center;
+  box-shadow: 0 2px 0 rgba(0,0,0,0.15);
+}
+
+.action-btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 0 0 rgba(0,0,0,0.15);
+}
+
+.action-btn .icon {
+  font-size: 34px;
+  line-height: 1;
+}
+
+.action-btn.water   { background: var(--color-accent-water); }
+.action-btn.pest    { background: var(--color-accent-pest); }
+.action-btn.harvest { background: var(--color-accent-harvest); }
+.action-btn.crop    { background: var(--color-accent-crop); }
+
+/* ---------- Batch cards ---------- */
+.batch-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.batch-card .batch-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+
+.batch-card .batch-meta {
+  font-size: 14px;
+  color: #444444;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tag {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #e4f4e8;
+  color: var(--color-primary-dark);
+  border: 1px solid #b9e2c2;
+}
+
+.tag.home {
+  background: #eaf2fb;
+  color: #0b4f80;
+  border-color: #bfdcf3;
+}
+
+/* ---------- Bottom nav ---------- */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  background: var(--color-bg);
+  border-top: 2px solid var(--color-border);
+}
+
+.nav-btn {
+  background: none;
+  border: none;
+  min-height: 68px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #555555;
+}
+
+.nav-btn .nav-icon {
+  font-size: 22px;
+}
+
+.nav-btn.active {
+  color: var(--color-primary-dark);
+}
+
+/* ---------- Modal ---------- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 50;
+  display: none;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.modal-overlay.open {
+  display: flex;
+}
+
+.modal-sheet {
+  background: var(--color-bg);
+  width: 100%;
+  max-width: 640px;
+  max-height: 92vh;
+  overflow-y: auto;
+  border-radius: 20px 20px 0 0;
+  padding: 20px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.modal-header h2 {
+  font-size: 19px;
+  margin: 0;
+}
+
+.modal-close {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  font-size: 18px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text);
+}
+
+.form-field {
+  margin-bottom: 16px;
+}
+
+.form-field label {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.form-field .hint {
+  display: block;
+  font-size: 12px;
+  color: #666666;
+  font-weight: 400;
+  margin-top: 2px;
+}
+
+/* ---------- Form inputs ---------- */
+input[type="date"],
+input[type="number"],
+select,
+textarea {
+  width: 100%;
+  min-height: var(--tap-min);
+  font-size: 16px;
+  padding: 12px 14px;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font);
+}
+
+/* FIX: override iOS Safari's native select chrome */
+select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23555555' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 40px;
+}
+
+/* FIX: textarea has its own min-height; removed redundant tap-min override */
+textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.money-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+/* ---------- Submit button ---------- */
+.submit-btn {
+  width: 100%;
+  min-height: var(--tap-min);
+  background: var(--color-primary);
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 700;
+  border: none;
+  border-radius: var(--radius);
+  margin-top: 8px;
+  box-shadow: 0 2px 0 rgba(0,0,0,0.15);
+}
+
+.submit-btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 0 0 rgba(0,0,0,0.15);
+}
+
+/* ---------- Toast notification ---------- */
+.toast {
+  position: fixed;
+  bottom: 88px; /* sit above the bottom nav */
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: #111111;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 12px 24px;
+  border-radius: 999px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 100;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ---------- Validation error state ---------- */
+input.invalid,
+select.invalid,
+textarea.invalid {
+  border-color: var(--color-danger);
+}

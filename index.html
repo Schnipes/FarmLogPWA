@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>FarmLog</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="manifest.json">
+</head>
+<body>
+
+  <header class="app-header">
+    <h1>FarmLog</h1>
+    <div class="status-badge">
+      <span class="status-dot" aria-hidden="true"></span>
+      <span>Online</span>
+    </div>
+  </header>
+
+  <main>
+    <section aria-label="Quick actions">
+      <p class="section-label">Quick log</p>
+      <div class="quick-actions">
+        <button class="action-btn water" onclick="openModal('water')">
+          <span class="icon" aria-hidden="true">💧</span>
+          <span>Log Fertigation / Watering</span>
+        </button>
+        <button class="action-btn pest" onclick="openModal('pest')">
+          <span class="icon" aria-hidden="true">🐛</span>
+          <span>Log Pest / Treatment</span>
+        </button>
+        <button class="action-btn harvest" onclick="openModal('harvest')">
+          <span class="icon" aria-hidden="true">🧺</span>
+          <span>Log Harvest / Sale</span>
+        </button>
+        <button class="action-btn crop" onclick="openModal('crop')">
+          <span class="icon" aria-hidden="true">🌱</span>
+          <span>Log Crop Action</span>
+        </button>
+      </div>
+    </section>
+
+    <section aria-label="Active batches">
+      <p class="section-label">Active batches</p>
+
+      <div class="batch-card">
+        <p class="batch-title">Eggplant (Long Purple)</p>
+        <p class="batch-meta">
+          <span class="tag">Commercial Project</span>
+          <span>Day 45</span>
+        </p>
+      </div>
+
+      <div class="batch-card">
+        <p class="batch-title">Kangkung</p>
+        <p class="batch-meta">
+          <span class="tag home">Home Fertigation</span>
+          <span>Day 18</span>
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <nav class="bottom-nav" aria-label="Primary">
+    <button class="nav-btn active">
+      <span class="nav-icon" aria-hidden="true">🏠</span>
+      <span>Home</span>
+    </button>
+    <button class="nav-btn">
+      <span class="nav-icon" aria-hidden="true">🧪</span>
+      <span>Formulas</span>
+    </button>
+    <button class="nav-btn">
+      <span class="nav-icon" aria-hidden="true">📊</span>
+      <span>Data</span>
+    </button>
+  </nav>
+
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <h2 id="modalTitle">Log activity</h2>
+        <button class="modal-close" onclick="closeModal()" aria-label="Close">✕</button>
+      </div>
+
+      <form id="logForm" onsubmit="handleSubmit(event)" novalidate>
+        <div class="form-field">
+          <label for="logDate">Date</label>
+          <input type="date" id="logDate" required>
+        </div>
+
+        <div class="form-field">
+          <label for="projectLocation">Project location</label>
+          <select id="projectLocation" required>
+            <option value="" disabled selected>Select location</option>
+            <optgroup label="Commercial Project">
+              <option value="commercial">Commercial Project</option>
+            </optgroup>
+            <optgroup label="Home Fertigation">
+              <option value="home">Home Fertigation</option>
+            </optgroup>
+          </select>
+        </div>
+
+        <div class="form-field">
+          <label for="activityCategory">Activity category</label>
+          <select id="activityCategory" required>
+            <option value="" disabled selected>Select category</option>
+            <option value="sowing">Sowing</option>
+            <option value="watering">Watering</option>
+            <option value="pest_control">Pest control</option>
+            <option value="harvest">Harvest</option>
+          </select>
+        </div>
+
+        <div class="form-field">
+          <label for="inputsUsed">
+            Inputs used
+            <span class="hint" id="inputsHint">e.g. Master Mix, LAB serum, BSF compost</span>
+          </label>
+          <textarea id="inputsUsed" placeholder="List inputs used for this activity" aria-describedby="inputsHint"></textarea>
+        </div>
+
+        <div class="form-field">
+          <label>Financials (optional)</label>
+          <div class="money-row">
+            <input type="number" id="costRM" placeholder="Cost (RM)" inputmode="decimal" min="0" step="0.01">
+            <input type="number" id="revenueRM" placeholder="Revenue (RM)" inputmode="decimal" min="0" step="0.01">
+          </div>
+        </div>
+
+        <button type="submit" class="submit-btn">Save log</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

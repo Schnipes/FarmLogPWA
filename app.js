@@ -90,6 +90,7 @@ function closeModal() {
     document.getElementById("toggleFinancialsBtn").textContent = "＋ Add financials";
     document.getElementById("logDate").classList.remove("invalid");
     document.getElementById("activityCategory").classList.remove("invalid");
+    document.getElementById("formulaPickerList").hidden = true;
 }
 
 document.getElementById("modalOverlay").addEventListener("click", function (e) {
@@ -242,6 +243,11 @@ function handleSubmit(event) {
             plantingDate: date,
             status:       "active"
         });
+        // Optimistic update — add crop to bed immediately
+        const bed = bedsData.find(b => String(b.bedNumber) === String(bedScope));
+        if (bed) bed.crops.push({ cropName, plantingDate: date });
+        renderBeds(bedsData);
+        populateBedDropdown();
     }
 
     if (activity === "harvest" && bedScope !== "all") {
@@ -772,7 +778,50 @@ async function fetchLogs() {
     }
 }
 
-// --- 12. Financial Summary ---
+// --- 12. Formula Picker ---
+function toggleFormulaPicker() {
+    const list = document.getElementById("formulaPickerList");
+    if (!list.hidden) { list.hidden = true; return; }
+
+    if (!formulasData.length) {
+        list.innerHTML = '<p style="color:#888;font-size:13px;padding:6px 0;">No formulas loaded.</p>';
+        list.hidden = false;
+        return;
+    }
+
+    list.innerHTML = formulasData.map((f, i) => `
+        <button type="button" class="formula-pick-item" onclick="applyFormula(${i})">
+            <span class="formula-pick-name">${escapeHtml(f.name)}</span>
+            ${f.category ? `<span class="formula-pick-cat">${escapeHtml(f.category)}</span>` : ""}
+        </button>`
+    ).join("");
+    list.hidden = false;
+}
+
+function applyFormula(index) {
+    const formula     = formulasData[index];
+    if (!formula) return;
+    const ingredients = parseRecipe(formula.recipe);
+    const vol         = parseFloat(document.getElementById("globalSprayerVol")?.value) || 16;
+
+    let text = `${formula.name} — ${vol}L sprayer`;
+    if (ingredients) {
+        const parts = ingredients.map(ing => {
+            const calc = ing.unit === 'g'
+                ? (ing.amount * vol).toFixed(1).replace(/\.0$/, '')
+                : Math.round(ing.amount * vol);
+            return `${ing.name}: ${calc}${ing.unit}`;
+        });
+        text += `\n${parts.join(", ")}`;
+    }
+
+    const textarea = document.getElementById("inputsUsed");
+    textarea.value = textarea.value ? textarea.value + "\n" + text : text;
+
+    document.getElementById("formulaPickerList").hidden = true;
+}
+
+// --- 13. Financial Summary ---
 function setFinPeriod(period) {
     finPeriod = period;
     document.getElementById("finWeekBtn").classList.toggle("active", period === "week");

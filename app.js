@@ -72,26 +72,44 @@ function populateBedDropdown() {
 }
 
 function updateBedFields() {
-    const scope    = document.getElementById("bedScope").value;
-    const activity = document.getElementById("activityCategory").value;
-    const isSowing      = activity === "sowing";
-    const isSpecificBed = scope !== "all";
+    const scope      = document.getElementById("bedScope").value;
+    const activity   = document.getElementById("activityCategory").value;
+    const isSowing   = activity === "sowing";
+    const isHarvest  = activity === "harvest";
+    const isSpecific = scope !== "all";
 
-    // "Currently growing" — show only for specific bed, non-sowing activities
-    const currentCropsField = document.getElementById("currentCropsField");
-    currentCropsField.hidden = !(isSpecificBed && !isSowing);
-    if (isSpecificBed && !isSowing) {
-        const bed  = bedsData.find(b => String(b.bedNumber) === String(scope));
+    // Hide all conditional fields first
+    document.getElementById("currentCropsField").hidden  = true;
+    document.getElementById("harvestCropsField").hidden  = true;
+    document.getElementById("newCropField").hidden       = true;
+    document.getElementById("newCropName").required      = false;
+
+    if (!isSpecific) return;
+
+    const bed = bedsData.find(b => String(b.bedNumber) === String(scope));
+
+    if (isSowing) {
+        document.getElementById("newCropField").hidden  = false;
+        document.getElementById("newCropName").required = true;
+
+    } else if (isHarvest) {
+        const list = document.getElementById("harvestCropsList");
+        if (bed && bed.crops.length) {
+            list.innerHTML = bed.crops.map((c, i) => `
+            <label class="harvest-crop-check">
+                <input type="checkbox" name="harvestCrop" value="${c.cropName}" id="hcrop_${i}">
+                <span>${c.cropName}</span>
+            </label>`).join("");
+            document.getElementById("harvestCropsField").hidden = false;
+        }
+
+    } else {
         const tags = document.getElementById("currentCropsTags");
         tags.innerHTML = (bed && bed.crops.length)
-            ? bed.crops.map(c => `<span class="tag">${c}</span>`).join("")
+            ? bed.crops.map(c => `<span class="tag">${c.cropName}</span>`).join("")
             : '<span style="color:#888;font-size:13px;">Empty bed</span>';
+        document.getElementById("currentCropsField").hidden = false;
     }
-
-    // "Crop being sown" — show only for sowing
-    const newCropField = document.getElementById("newCropField");
-    newCropField.hidden = !isSowing;
-    document.getElementById("newCropName").required = isSowing && isSpecificBed;
 }
 
 // --- 5. Offline Storage ---
@@ -140,13 +158,28 @@ function handleSubmit(event) {
     // Sowing on a specific bed also creates a new batch record
     if (activity === "sowing" && bedScope !== "all" && cropName) {
         queue.push({
-            action:      "addBatch",
-            id:          "batch_" + Date.now(),
-            bedNumber:   bedScope,
+            action:       "addBatch",
+            id:           "batch_" + Date.now(),
+            bedNumber:    bedScope,
             cropName,
-            location:    "commercial",
+            location:     "commercial",
             plantingDate: date,
-            status:      "active"
+            status:       "active"
+        });
+    }
+
+    // Harvest — mark checked crops as done
+    if (activity === "harvest" && bedScope !== "all") {
+        const checked = [...document.querySelectorAll('input[name="harvestCrop"]:checked')];
+        checked.forEach(cb => {
+            queue.push({
+                action:      "updateBatch",
+                id:          "update_" + Date.now() + "_" + cb.value,
+                bedNumber:   bedScope,
+                cropName:    cb.value,
+                harvestDate: date,
+                status:      "done"
+            });
         });
     }
 

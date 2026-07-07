@@ -141,6 +141,20 @@
     </div>
   </div>
 
+  <!-- Bed Detail Sheet -->
+  <div class="modal-overlay" id="bedDetailOverlay">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <h2 id="bedDetailTitle">Bed</h2>
+        <button class="modal-close" onclick="closeBedDetail()" aria-label="Close">✕</button>
+      </div>
+      <div id="bedDetailContent"></div>
+      <button class="submit-btn" id="bedDetailLogBtn" style="margin-top:16px;" onclick="logForBed()">
+        Log activity for this bed
+      </button>
+    </div>
+  </div>
+
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script src="app.js"></script>

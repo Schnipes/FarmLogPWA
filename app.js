@@ -203,24 +203,93 @@ function daysSince(dateStr) {
 
 function renderBeds(beds) {
     const container = document.getElementById("batchList");
-    const active = beds.filter(b => b.crops.length > 0);
-    if (!active.length) {
-        container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">No active crops.</p>';
+    if (!beds.length) {
+        container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">No beds yet. Tap + Add Bed to start.</p>';
         return;
     }
-    container.innerHTML = active.map(bed => {
-        const cropItems = bed.crops.map(c => `
-            <div class="bed-crop-row">
-                <span>🌱 ${c.cropName}</span>
-                <span class="bed-day-badge">Day ${daysSince(c.plantingDate)}</span>
-            </div>`).join("");
-        return `
-        <div class="batch-card">
-            <p class="batch-title">Bed ${bed.bedNumber}</p>
-            <div class="bed-crops">${cropItems}</div>
-        </div>`;
-    }).join("");
+
+    const growing = beds.filter(b => b.crops.length > 0);
+    const empty   = beds.filter(b => b.crops.length === 0);
+
+    let html = "";
+
+    if (growing.length) {
+        html += `<p class="bed-group-label">Growing (${growing.length})</p>`;
+        html += growing.map(bed => `
+        <div class="batch-card bed-card-clickable" onclick="openBedDetail(${bed.bedNumber})">
+            <div class="bed-card-header">
+                <p class="batch-title">Bed ${bed.bedNumber}</p>
+                <span class="bed-chevron">›</span>
+            </div>
+            <div class="bed-crops">
+                ${bed.crops.map(c => `
+                <div class="bed-crop-row">
+                    <span>🌱 ${c.cropName}</span>
+                    <span class="bed-day-badge">Day ${daysSince(c.plantingDate)}</span>
+                </div>`).join("")}
+            </div>
+        </div>`).join("");
+    }
+
+    if (empty.length) {
+        html += `<p class="bed-group-label" style="margin-top:16px;">Empty (${empty.length})</p>`;
+        html += empty.map(bed => `
+        <div class="batch-card bed-card-empty bed-card-clickable" onclick="openBedDetail(${bed.bedNumber})">
+            <div class="bed-card-header">
+                <p class="batch-title" style="color:#888;">Bed ${bed.bedNumber}</p>
+                <span class="bed-chevron">›</span>
+            </div>
+            <p class="bed-empty-label">Ready to sow</p>
+        </div>`).join("");
+    }
+
+    container.innerHTML = html;
 }
+
+function openBedDetail(bedNum) {
+    const bed = bedsData.find(b => String(b.bedNumber) === String(bedNum));
+    if (!bed) return;
+
+    document.getElementById("bedDetailTitle").textContent = "Bed " + bedNum;
+
+    const content = document.getElementById("bedDetailContent");
+    if (!bed.crops.length) {
+        content.innerHTML = '<p style="color:#888;padding:12px 0 8px;">Empty — ready to sow.</p>';
+    } else {
+        content.innerHTML = bed.crops.map(c => `
+        <div class="bed-detail-crop">
+            <div class="bed-detail-row">
+                <span class="bed-detail-icon">🌱</span>
+                <div class="bed-detail-info">
+                    <p class="bed-detail-name">${c.cropName}</p>
+                    <p class="bed-detail-meta">Planted ${c.plantingDate}</p>
+                </div>
+                <span class="bed-day-badge">Day ${daysSince(c.plantingDate)}</span>
+            </div>
+        </div>`).join("");
+    }
+
+    document.getElementById("bedDetailLogBtn").dataset.bed = bedNum;
+    document.getElementById("bedDetailOverlay").classList.add("open");
+    document.body.style.overflow = "hidden";
+}
+
+function closeBedDetail() {
+    document.getElementById("bedDetailOverlay").classList.remove("open");
+    document.body.style.overflow = "";
+}
+
+function logForBed() {
+    const bedNum = document.getElementById("bedDetailLogBtn").dataset.bed;
+    closeBedDetail();
+    openModal("water");
+    document.getElementById("bedScope").value = bedNum;
+    updateBedFields();
+}
+
+document.getElementById("bedDetailOverlay").addEventListener("click", function(e) {
+    if (e.target === this) closeBedDetail();
+});
 
 function addBed() {
     const nextNum = bedsData.length > 0

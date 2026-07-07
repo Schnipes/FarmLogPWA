@@ -402,6 +402,91 @@ textarea {
   padding: 10px 0 4px;
 }
 
+/* ---------- Bed group label ---------- */
+.bed-group-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #888;
+  margin: 0 0 8px 4px;
+}
+
+/* ---------- Bed cards ---------- */
+.bed-card-clickable {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.bed-card-clickable:active {
+  background: #e8e8e8;
+}
+
+.bed-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.bed-card-header .batch-title {
+  margin: 0;
+}
+
+.bed-chevron {
+  font-size: 22px;
+  color: #aaa;
+  line-height: 1;
+}
+
+.bed-card-empty {
+  border-style: dashed;
+  opacity: 0.75;
+}
+
+.bed-empty-label {
+  font-size: 13px;
+  color: #888;
+  margin: 6px 0 0;
+}
+
+/* ---------- Bed detail modal ---------- */
+.bed-detail-crop {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.bed-detail-crop:last-child {
+  border-bottom: none;
+}
+
+.bed-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.bed-detail-icon {
+  font-size: 28px;
+  flex-shrink: 0;
+}
+
+.bed-detail-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.bed-detail-name {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0 0 2px;
+}
+
+.bed-detail-meta {
+  font-size: 13px;
+  color: #666;
+  margin: 0;
+}
+
 /* ---------- Bed cards ---------- */
 .bed-crops {
   margin-top: 8px;

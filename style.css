@@ -616,6 +616,30 @@ textarea {
   color: var(--color-text);
 }
 
+/* ---------- Formula global sprayer volume ---------- */
+.formula-volume-global {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+}
+
+#globalSprayerVol {
+  width: 64px;
+  min-height: unset !important;
+  height: 36px;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 6px 10px;
+  text-align: center;
+  border: 2px solid var(--color-border);
+  border-radius: 8px;
+}
+
 /* ---------- Formula dosage calculator ---------- */
 .formula-calc {
   margin-top: 12px;

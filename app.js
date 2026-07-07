@@ -507,13 +507,13 @@ function renderIngredients(ingredients, liters) {
     }).join('');
 }
 
-function calcDose(index, liters) {
-    const formula = formulasData[index];
-    if (!formula) return;
-    const ingredients = parseRecipe(formula.recipe);
-    if (!ingredients) return;
-    const container = document.getElementById(`ingredients-${index}`);
-    if (container) container.innerHTML = renderIngredients(ingredients, liters);
+function recalcAllDoses(liters) {
+    formulasData.forEach((f, i) => {
+        const ingredients = parseRecipe(f.recipe);
+        if (!ingredients) return;
+        const container = document.getElementById(`ingredients-${i}`);
+        if (container) container.innerHTML = renderIngredients(ingredients, liters);
+    });
 }
 
 function renderFormulas(formulas) {
@@ -523,20 +523,13 @@ function renderFormulas(formulas) {
         container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">No formulas yet. Add them in the Formulas sheet tab.</p>';
         return;
     }
+    const vol = parseFloat(document.getElementById("globalSprayerVol")?.value) || 16;
     container.innerHTML = formulas.map((f, i) => {
         const ingredients = parseRecipe(f.recipe);
         const calcSection = ingredients ? `
             <div class="formula-calc">
-                <div class="formula-calc-row">
-                    <span class="formula-calc-label">Sprayer volume</span>
-                    <div class="formula-volume-wrap">
-                        <input type="number" class="formula-volume-input" value="16" min="1" max="100" step="1"
-                               oninput="calcDose(${i}, this.value)" id="vol-${i}">
-                        <span class="formula-volume-unit">L</span>
-                    </div>
-                </div>
                 <div class="formula-ingredients" id="ingredients-${i}">
-                    ${renderIngredients(ingredients, 16)}
+                    ${renderIngredients(ingredients, vol)}
                 </div>
             </div>` : (f.recipe ? `<pre class="formula-recipe">${escapeHtml(f.recipe)}</pre>` : '');
         return `

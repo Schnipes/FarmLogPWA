@@ -72,6 +72,14 @@
     <div id="view-formulas" class="view" hidden>
       <section aria-label="Formulas">
         <p class="section-label">Formulas</p>
+        <div class="formula-volume-global">
+          <span class="formula-calc-label">Sprayer volume</span>
+          <div class="formula-volume-wrap">
+            <input type="number" id="globalSprayerVol" value="16" min="1" max="100" step="1"
+                   oninput="recalcAllDoses(this.value)">
+            <span class="formula-volume-unit">L</span>
+          </div>
+        </div>
         <div id="formulaList">
           <p style="color:#888;font-size:14px;padding:8px 4px;">Loading formulas...</p>
         </div>

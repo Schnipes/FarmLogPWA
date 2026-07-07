@@ -817,6 +817,75 @@ textarea {
   color: var(--color-primary-dark);
 }
 
+/* ---------- Financial summary card ---------- */
+.fin-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+
+.fin-toggle {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.fin-toggle-btn {
+  flex: 1;
+  padding: 6px 0;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: transparent;
+  color: #666;
+}
+
+.fin-toggle-btn.active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+
+.fin-stats {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.fin-stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.fin-divider {
+  width: 1px;
+  height: 36px;
+  background: var(--color-border);
+}
+
+.fin-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #999;
+}
+
+.fin-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.fin-value.green { color: var(--color-primary); }
+.fin-value.red   { color: var(--color-danger); }
+
 /* ---------- Sale log card ---------- */
 .log-card-sale {
   border-left: 3px solid var(--color-accent-sale);

@@ -30,6 +30,7 @@ let selectedBedForLog = null;
 let addBedPending     = false;
 let activeLogFilter   = "all";
 let activeTypeFilter  = "all";
+let finPeriod         = "week";
 
 // --- 2. Utilities ---
 function escapeHtml(str) {
@@ -308,7 +309,7 @@ function switchView(viewName) {
     if (activeBtn) activeBtn.classList.add("active");
     const formulasBtn = document.querySelector(".formulas-btn");
     if (formulasBtn) formulasBtn.classList.toggle("active", viewName === "formulas");
-    if (viewName === "data") { renderBedFilterChips(); renderTypeFilterChips(); fetchLogs(); }
+    if (viewName === "data") { renderBedFilterChips(); renderTypeFilterChips(); renderFinancialSummary(); fetchLogs(); }
     if (viewName === "formulas") fetchFormulas();
 }
 
@@ -758,6 +759,7 @@ async function fetchLogs() {
         localStorage.setItem(LOGS_CACHE_KEY,  JSON.stringify(logs));
         localStorage.setItem(SALES_CACHE_KEY, JSON.stringify(sales));
         renderCombinedActivity();
+        renderFinancialSummary();
     } catch (e) {
         if (!cachedLogs) {
             container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">Could not load activity.</p>';
@@ -765,7 +767,51 @@ async function fetchLogs() {
     }
 }
 
-// --- 12. Sales ---
+// --- 12. Financial Summary ---
+function setFinPeriod(period) {
+    finPeriod = period;
+    document.getElementById("finWeekBtn").classList.toggle("active", period === "week");
+    document.getElementById("finMonthBtn").classList.toggle("active", period === "month");
+    renderFinancialSummary();
+}
+
+function renderFinancialSummary() {
+    const now   = new Date();
+    let start;
+
+    if (finPeriod === "week") {
+        // Monday of current week
+        const day = now.getDay() === 0 ? 6 : now.getDay() - 1;
+        start = new Date(now);
+        start.setDate(now.getDate() - day);
+    } else {
+        // 1st of current month
+        start = new Date(now.getFullYear(), now.getMonth(), 1);
+    }
+    start.setHours(0, 0, 0, 0);
+
+    const sales = JSON.parse(localStorage.getItem(SALES_CACHE_KEY) || "[]");
+    const logs  = JSON.parse(localStorage.getItem(LOGS_CACHE_KEY)  || "[]");
+
+    const revenue = sales
+        .filter(s => s.date && new Date(s.date) >= start)
+        .reduce((sum, s) => sum + (parseFloat(s.totalRevenue) || 0), 0);
+
+    const cost = logs
+        .filter(l => l.date && new Date(l.date) >= start && l.costRM)
+        .reduce((sum, l) => sum + (parseFloat(l.costRM) || 0), 0);
+
+    const net = revenue - cost;
+
+    document.getElementById("finRevenue").textContent = "RM " + revenue.toFixed(2);
+    document.getElementById("finCost").textContent    = "RM " + cost.toFixed(2);
+
+    const netEl = document.getElementById("finNet");
+    netEl.textContent = (net >= 0 ? "+" : "") + "RM " + net.toFixed(2);
+    netEl.className = "fin-value " + (net >= 0 ? "green" : "red");
+}
+
+// --- 13. Sales ---
 function openSaleModal() {
     document.getElementById("saleDate").value = todayString();
     document.getElementById("saleCrop").value = "";

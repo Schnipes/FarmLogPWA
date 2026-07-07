@@ -94,6 +94,31 @@
     <div id="view-data" class="view" hidden>
       <section aria-label="Activity log">
         <p class="section-label">Activity</p>
+
+        <!-- Financial Summary -->
+        <div class="fin-card">
+          <div class="fin-toggle">
+            <button class="fin-toggle-btn active" id="finWeekBtn" onclick="setFinPeriod('week')">This week</button>
+            <button class="fin-toggle-btn" id="finMonthBtn" onclick="setFinPeriod('month')">This month</button>
+          </div>
+          <div class="fin-stats">
+            <div class="fin-stat">
+              <span class="fin-label">Revenue</span>
+              <span class="fin-value green" id="finRevenue">RM 0</span>
+            </div>
+            <div class="fin-divider"></div>
+            <div class="fin-stat">
+              <span class="fin-label">Cost</span>
+              <span class="fin-value" id="finCost">RM 0</span>
+            </div>
+            <div class="fin-divider"></div>
+            <div class="fin-stat">
+              <span class="fin-label">Net</span>
+              <span class="fin-value" id="finNet">RM 0</span>
+            </div>
+          </div>
+        </div>
+
         <div id="bedFilterChips" class="bed-filter-chips"></div>
         <div id="typeFilterChips" class="bed-filter-chips"></div>
         <div id="logList">

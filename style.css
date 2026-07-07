@@ -372,6 +372,40 @@ textarea {
   transform: translateX(-50%) translateY(0);
 }
 
+/* ---------- Crop tags (form) ---------- */
+.crop-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 0 4px;
+}
+
+/* ---------- Bed cards ---------- */
+.bed-crops {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bed-crop-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  color: #333333;
+}
+
+.bed-day-badge {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-primary-dark);
+  background: #e4f4e8;
+  border: 1px solid #b9e2c2;
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+
 /* ---------- Log cards ---------- */
 .log-card {
   background: var(--color-surface);

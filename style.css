@@ -16,6 +16,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 
 html, body {
   margin: 0;
@@ -224,15 +225,18 @@ section {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.5);
+  background: rgba(0,0,0,0);
   z-index: 50;
-  display: none;
+  display: flex;
   align-items: flex-end;
   justify-content: center;
+  pointer-events: none;
+  transition: background 0.25s ease;
 }
 
 .modal-overlay.open {
-  display: flex;
+  background: rgba(0,0,0,0.5);
+  pointer-events: auto;
 }
 
 .modal-sheet {
@@ -243,6 +247,12 @@ section {
   overflow-y: auto;
   border-radius: 20px 20px 0 0;
   padding: 20px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+  transform: translateY(100%);
+  transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.modal-overlay.open .modal-sheet {
+  transform: translateY(0);
 }
 
 .modal-header {
@@ -647,6 +657,72 @@ textarea {
   min-height: unset;
   padding: 0;
   border: none;
+}
+
+/* ---------- Bed context bar (in log form) ---------- */
+.bed-context-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px;
+  background: #e4f4e8;
+  border: 1px solid #b9e2c2;
+  border-radius: var(--radius);
+  margin-top: -8px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-primary-dark);
+}
+
+/* ---------- Collapsible extras toggles ---------- */
+.form-extras-toggles {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.extras-toggle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-primary-dark);
+  background: #e4f4e8;
+  border: 1px solid #b9e2c2;
+  border-radius: 999px;
+  padding: 6px 14px;
+}
+
+/* ---------- Empty beds card ---------- */
+.empty-beds-card {
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius);
+  padding: 32px 16px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.empty-beds-card:active {
+  background: var(--color-surface);
+}
+
+.empty-beds-icon {
+  font-size: 40px;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.empty-beds-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-primary-dark);
+  margin: 0 0 4px;
+}
+
+.empty-beds-hint {
+  font-size: 13px;
+  color: #888;
+  margin: 0;
 }
 
 /* ---------- Bed detail — activity picker ---------- */

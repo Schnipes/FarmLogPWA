@@ -24,29 +24,9 @@
   <main>
     <!-- Home View -->
     <div id="view-home" class="view">
-      <section aria-label="Quick actions">
-        <p class="section-label">Quick log</p>
-        <div class="quick-actions">
-          <button class="action-btn water" onclick="openModal('water')">
-            <span class="icon" aria-hidden="true">💧</span>
-            <span>Log Fertigation / Watering</span>
-          </button>
-          <button class="action-btn pest" onclick="openModal('pest')">
-            <span class="icon" aria-hidden="true">🐛</span>
-            <span>Log Pest / Treatment</span>
-          </button>
-          <button class="action-btn harvest" onclick="openModal('harvest')">
-            <span class="icon" aria-hidden="true">🧺</span>
-            <span>Log Harvest / Sale</span>
-          </button>
-          <button class="action-btn crop" onclick="openModal('crop')">
-            <span class="icon" aria-hidden="true">🌱</span>
-            <span>Log Crop Action</span>
-          </button>
-        </div>
-      </section>
 
-      <section aria-label="Active batches">
+      <!-- Beds first — primary content -->
+      <section aria-label="Active beds">
         <div class="section-header">
           <p class="section-label">Active beds</p>
           <button class="add-bed-btn" onclick="addBed()">+ Add Bed</button>
@@ -55,6 +35,30 @@
           <p style="color:#888;font-size:14px;padding:8px 4px;">Loading beds...</p>
         </div>
       </section>
+
+      <!-- Quick log — secondary, for whole-farm or fast access -->
+      <section aria-label="Quick actions">
+        <p class="section-label">Quick log</p>
+        <div class="quick-actions">
+          <button class="action-btn water" onclick="openModal('water')">
+            <span class="icon" aria-hidden="true">💧</span>
+            <span>Irrigate</span>
+          </button>
+          <button class="action-btn pest" onclick="openModal('pest')">
+            <span class="icon" aria-hidden="true">🐛</span>
+            <span>Pest Control</span>
+          </button>
+          <button class="action-btn harvest" onclick="openModal('harvest')">
+            <span class="icon" aria-hidden="true">🧺</span>
+            <span>Harvest</span>
+          </button>
+          <button class="action-btn crop" onclick="openModal('crop')">
+            <span class="icon" aria-hidden="true">🌱</span>
+            <span>Sow Crop</span>
+          </button>
+        </div>
+      </section>
+
     </div>
 
     <!-- Formulas View -->
@@ -93,6 +97,7 @@
     </button>
   </nav>
 
+  <!-- Log Modal -->
   <div class="modal-overlay" id="modalOverlay">
     <div class="modal-sheet">
       <div class="modal-header">
@@ -124,6 +129,9 @@
           </select>
         </div>
 
+        <!-- Context bar: shows current crops for selected bed -->
+        <div id="bedContextBar" class="bed-context-bar" hidden></div>
+
         <div class="form-field" id="currentCropsField" hidden>
           <label>Currently growing in this bed</label>
           <div id="currentCropsTags" class="crop-tags"></div>
@@ -139,7 +147,13 @@
           <input type="text" id="newCropName" placeholder="e.g. Red Amaranth">
         </div>
 
-        <div class="form-field">
+        <!-- Collapsible extras -->
+        <div class="form-extras-toggles">
+          <button type="button" class="extras-toggle" id="toggleInputsBtn" onclick="toggleInputs()">＋ Add inputs / notes</button>
+          <button type="button" class="extras-toggle" id="toggleFinancialsBtn" onclick="toggleFinancials()">＋ Add financials</button>
+        </div>
+
+        <div class="form-field" id="inputsField" hidden>
           <label for="inputsUsed">
             Inputs used
             <span class="hint" id="inputsHint">e.g. Master Mix, LAB serum, BSF compost</span>
@@ -147,8 +161,8 @@
           <textarea id="inputsUsed" placeholder="List inputs used for this activity" aria-describedby="inputsHint"></textarea>
         </div>
 
-        <div class="form-field">
-          <label>Financials (optional)</label>
+        <div class="form-field" id="financialsField" hidden>
+          <label>Financials</label>
           <div class="money-row">
             <input type="number" id="costRM" placeholder="Cost (RM)" inputmode="decimal" min="0" step="0.01">
             <input type="number" id="revenueRM" placeholder="Revenue (RM)" inputmode="decimal" min="0" step="0.01">

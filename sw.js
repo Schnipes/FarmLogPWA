@@ -1,6 +1,5 @@
-const CACHE_NAME = 'farmlog-cache-v11';
+const CACHE_NAME = 'farmlog-cache-v12';
 
-// These are the files the phone will download and save for offline use
 const urlsToCache = [
   './',
   './index.html',
@@ -9,40 +8,28 @@ const urlsToCache = [
   './manifest.json'
 ];
 
-// 1. Install the Service Worker and Cache the Files
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then(cache => {
-        console.log('Opened cache');
-        return cache.addAll(urlsToCache);
-      })
+      .then(cache => cache.addAll(urlsToCache))
+      .then(() => self.skipWaiting())
   );
 });
 
-// 2. Intercept network requests and serve from Cache if offline
 self.addEventListener('fetch', event => {
   event.respondWith(
     caches.match(event.request)
-      .then(response => {
-        // Return the cached file if we have it, otherwise try the internet
-        return response || fetch(event.request);
-      })
+      .then(response => response || fetch(event.request))
   );
 });
 
-// 3. Update the Service Worker if files change
 self.addEventListener('activate', event => {
-  const cacheWhitelist = [CACHE_NAME];
   event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames.map(cacheName => {
-          if (cacheWhitelist.indexOf(cacheName) === -1) {
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
+    Promise.all([
+      clients.claim(),
+      caches.keys().then(names => Promise.all(
+        names.map(name => name !== CACHE_NAME && caches.delete(name))
+      ))
+    ])
   );
 });

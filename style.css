@@ -44,6 +44,30 @@ input:focus-visible {
   outline-offset: 2px;
 }
 
+/* ---------- Update banner ---------- */
+.update-banner {
+  background: #146b2d;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.update-banner-btn {
+  background: rgba(255,255,255,0.2);
+  color: #ffffff;
+  border: 1px solid rgba(255,255,255,0.4);
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 4px 14px;
+}
+
 /* ---------- Header ---------- */
 .app-header {
   position: sticky;
@@ -807,6 +831,27 @@ textarea {
 
 .log-date-group:first-child {
   margin-top: 0;
+}
+
+/* ---------- Log card delete button ---------- */
+.log-card {
+  position: relative;
+}
+
+.log-delete-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: none;
+  border: none;
+  font-size: 16px;
+  color: #bbb;
+  padding: 4px;
+  line-height: 1;
+}
+
+.log-delete-btn:active {
+  color: var(--color-danger);
 }
 
 /* ---------- Validation error state ---------- */

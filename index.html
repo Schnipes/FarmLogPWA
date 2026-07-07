@@ -13,6 +13,10 @@
 </head>
 <body>
 
+  <div id="updateBanner" class="update-banner" hidden>
+    New version available — <button onclick="window.location.reload()" class="update-banner-btn">Refresh</button>
+  </div>
+
   <header class="app-header">
     <h1>FarmLog</h1>
     <div class="header-actions">
@@ -79,6 +83,7 @@
       <section aria-label="Activity log">
         <p class="section-label">Activity</p>
         <div id="bedFilterChips" class="bed-filter-chips"></div>
+        <div id="typeFilterChips" class="bed-filter-chips"></div>
         <div id="logList">
           <p style="color:#888;font-size:14px;padding:8px 4px;">Loading logs...</p>
         </div>

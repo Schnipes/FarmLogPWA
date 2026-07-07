@@ -27,6 +27,7 @@ let bedsData          = [];
 let selectedBedForLog = null;
 let addBedPending     = false;
 let activeLogFilter   = "all";
+let activeTypeFilter  = "all";
 
 // --- 2. Utilities ---
 function escapeHtml(str) {
@@ -305,7 +306,7 @@ function switchView(viewName) {
     if (activeBtn) activeBtn.classList.add("active");
     const formulasBtn = document.querySelector(".formulas-btn");
     if (formulasBtn) formulasBtn.classList.toggle("active", viewName === "formulas");
-    if (viewName === "data") { renderBedFilterChips(); fetchLogs(); }
+    if (viewName === "data") { renderBedFilterChips(); renderTypeFilterChips(); fetchLogs(); }
     if (viewName === "formulas") fetchFormulas();
 }
 
@@ -538,9 +539,24 @@ function dateGroupLabel(dateStr) {
 function renderBedFilterChips() {
     const container = document.getElementById("bedFilterChips");
     if (!container) return;
-    const chips = [{ label: "All", value: "all" }, ...bedsData.map(b => ({ label: "Bed " + b.bedNumber, value: String(b.bedNumber) }))];
+    const chips = [{ label: "All beds", value: "all" }, ...bedsData.map(b => ({ label: "Bed " + b.bedNumber, value: String(b.bedNumber) }))];
     container.innerHTML = chips.map(c =>
         `<button class="bed-filter-chip${activeLogFilter === c.value ? " active" : ""}" onclick="filterLogs('${c.value}')">${c.label}</button>`
+    ).join("");
+}
+
+function renderTypeFilterChips() {
+    const container = document.getElementById("typeFilterChips");
+    if (!container) return;
+    const types = [
+        { label: "All types", value: "all" },
+        { label: "💧 Watering",     value: "watering" },
+        { label: "🐛 Pest control", value: "pest_control" },
+        { label: "🧺 Harvest",      value: "harvest" },
+        { label: "🌱 Sowing",       value: "sowing" }
+    ];
+    container.innerHTML = types.map(t =>
+        `<button class="bed-filter-chip${activeTypeFilter === t.value ? " active" : ""}" onclick="filterByType('${t.value}')">${t.label}</button>`
     ).join("");
 }
 
@@ -551,12 +567,34 @@ function filterLogs(bedNum) {
     renderLogs(cached ? JSON.parse(cached) : []);
 }
 
+function filterByType(type) {
+    activeTypeFilter = type;
+    renderTypeFilterChips();
+    const cached = localStorage.getItem(LOGS_CACHE_KEY);
+    renderLogs(cached ? JSON.parse(cached) : []);
+}
+
+function deleteLogEntry(logId) {
+    if (!confirm("Delete this log entry?")) return;
+    const cached = localStorage.getItem(LOGS_CACHE_KEY);
+    if (!cached) return;
+    const logs = JSON.parse(cached).filter(l => String(l.id) !== String(logId));
+    localStorage.setItem(LOGS_CACHE_KEY, JSON.stringify(logs));
+    renderLogs(logs);
+    const queue = getOfflineLogs();
+    queue.push({ action: "deleteLog", logId });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(queue));
+    updateSyncBadge();
+    showToast("Log deleted");
+    processOfflineQueue();
+}
+
 function renderLogs(logs) {
     const container = document.getElementById("logList");
 
-    const filtered = activeLogFilter === "all"
-        ? logs
-        : logs.filter(log => String(log.bedNumber) === String(activeLogFilter));
+    const filtered = logs
+        .filter(log => activeLogFilter === "all" || String(log.bedNumber) === String(activeLogFilter))
+        .filter(log => activeTypeFilter === "all" || log.activityCategory === activeTypeFilter);
 
     if (!filtered.length) {
         container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">No logs yet.</p>';
@@ -587,6 +625,7 @@ function renderLogs(logs) {
                     </div>` : "";
                 return `
                 <div class="log-card">
+                    <button class="log-delete-btn" onclick="deleteLogEntry('${escapeHtml(String(log.id))}')" aria-label="Delete log">✕</button>
                     <div class="log-header">
                         <span class="log-icon">${icon}</span>
                         <div class="log-meta">
@@ -643,5 +682,8 @@ document.addEventListener("DOMContentLoaded", () => {
         navigator.serviceWorker.register("./sw.js")
             .then(reg => console.log("SW registered:", reg.scope))
             .catch(err => console.error("SW registration failed:", err));
+        navigator.serviceWorker.addEventListener("controllerchange", () => {
+            document.getElementById("updateBanner").hidden = false;
+        });
     }
 });

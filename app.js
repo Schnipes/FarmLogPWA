@@ -1,7 +1,6 @@
 // --- 1. Configuration & UI Variables ---
 const STORAGE_KEY = "offline_farm_logs";
-// ⚠️ PASTE YOUR GOOGLE APPS SCRIPT URL BELOW ⚠️
-const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyQSzKWjoj3rD4_d045XN4csdYW5VXIHxV9qHviMBUc7iJvacGRHHuBLQPUTecMCBmswQ/exec"
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyQSzKWjoj3rD4_d045XN4csdYW5VXIHxV9qHviMBUc7iJvacGRHHuBLQPUTecMCBmswQ/exec";
 const modalTitles = {
     water: "Log fertigation / watering",
     pest: "Log pest / treatment",
@@ -16,7 +15,15 @@ const defaultCategory = {
     crop: "sowing"
 };
 
-// --- 2. Modal Controls ---
+// --- 2. Toast ---
+function showToast(msg) {
+    const toast = document.getElementById("toast");
+    toast.textContent = msg;
+    toast.classList.add("show");
+    setTimeout(() => toast.classList.remove("show"), 3000);
+}
+
+// --- 3. Modal Controls ---
 function todayString() {
     const d = new Date();
     const yyyy = d.getFullYear();
@@ -44,7 +51,7 @@ document.getElementById("modalOverlay").addEventListener("click", function (even
     if (event.target === this) closeModal();
 });
 
-// --- 3. Offline Storage Engine ---
+// --- 4. Offline Storage Engine ---
 function getOfflineLogs() {
     const data = localStorage.getItem(STORAGE_KEY);
     return data ? JSON.parse(data) : [];
@@ -84,12 +91,11 @@ function handleSubmit(event) {
 
     updateSyncBadge();
     closeModal();
-    
-    // Attempt to sync immediately if we happen to have internet
+    showToast("Log saved!");
     processOfflineQueue();
 }
 
-// --- 4. The Cloud Sync Engine ---
+// --- 5. The Cloud Sync Engine ---
 async function processOfflineQueue() {
     // If the browser knows we are strictly offline, stop here.
     if (!navigator.onLine) return; 
@@ -126,12 +132,51 @@ async function processOfflineQueue() {
     }
 }
 
-// --- 5. App Initialization & Listeners ---
+// --- 6. Batch Cards ---
+function daysSince(dateStr) {
+    const planted = new Date(dateStr);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return Math.floor((today - planted) / (1000 * 60 * 60 * 24));
+}
+
+function renderBatches(batches) {
+    const container = document.getElementById("batchList");
+    if (!batches.length) {
+        container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">No active batches.</p>';
+        return;
+    }
+    container.innerHTML = batches.map(b => {
+        const days = daysSince(b.plantingDate);
+        const isHome = b.location === "home";
+        return `
+        <div class="batch-card">
+            <p class="batch-title">${b.cropName}</p>
+            <p class="batch-meta">
+                <span class="tag ${isHome ? "home" : ""}">${isHome ? "Home Fertigation" : "Commercial Project"}</span>
+                <span>Day ${days}</span>
+            </p>
+        </div>`;
+    }).join("");
+}
+
+async function fetchBatches() {
+    try {
+        const res = await fetch(GOOGLE_SCRIPT_URL + "?action=getBatches");
+        const data = await res.json();
+        if (data.batches) renderBatches(data.batches);
+    } catch (e) {
+        console.error("Could not load batches:", e);
+    }
+}
+
+// --- 7. App Initialization & Listeners ---
 window.addEventListener("online", processOfflineQueue);
 
 document.addEventListener("DOMContentLoaded", () => {
     updateSyncBadge();
     processOfflineQueue();
+    fetchBatches();
 
     if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("./sw.js")

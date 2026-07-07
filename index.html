@@ -15,9 +15,12 @@
 
   <header class="app-header">
     <h1>FarmLog</h1>
-    <div class="status-badge">
-      <span class="status-dot" aria-hidden="true"></span>
-      <span>Online</span>
+    <div class="header-actions">
+      <button class="formulas-btn" onclick="switchView('formulas')" aria-label="Formulas">🧪</button>
+      <div class="status-badge">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span>Online</span>
+      </div>
     </div>
   </header>
 
@@ -87,10 +90,6 @@
     <button class="nav-btn active" data-view="home">
       <span class="nav-icon" aria-hidden="true">🏠</span>
       <span>Home</span>
-    </button>
-    <button class="nav-btn" data-view="formulas">
-      <span class="nav-icon" aria-hidden="true">🧪</span>
-      <span>Formulas</span>
     </button>
     <button class="nav-btn" data-view="data">
       <span class="nav-icon" aria-hidden="true">📊</span>

@@ -64,6 +64,27 @@ input:focus-visible {
   letter-spacing: -0.02em;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.formulas-btn {
+  font-size: 22px;
+  background: none;
+  border: none;
+  padding: 4px 6px;
+  border-radius: 8px;
+  line-height: 1;
+  opacity: 0.6;
+}
+
+.formulas-btn.active {
+  opacity: 1;
+  background: var(--color-surface);
+}
+
 .status-badge {
   display: flex;
   align-items: center;
@@ -194,7 +215,7 @@ section {
   right: 0;
   z-index: 20;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   background: var(--color-bg);
   border-top: 2px solid var(--color-border);
 }
@@ -455,6 +476,12 @@ textarea {
 
 .bed-empty-label {
   font-size: 13px;
+  color: #888;
+  margin: 6px 0 0;
+}
+
+.bed-last-activity {
+  font-size: 12px;
   color: #888;
   margin: 6px 0 0;
 }

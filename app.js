@@ -303,11 +303,22 @@ function switchView(viewName) {
     document.querySelectorAll(".nav-btn").forEach(btn => btn.classList.remove("active"));
     const activeBtn = document.querySelector(`[data-view="${viewName}"]`);
     if (activeBtn) activeBtn.classList.add("active");
+    const formulasBtn = document.querySelector(".formulas-btn");
+    if (formulasBtn) formulasBtn.classList.toggle("active", viewName === "formulas");
     if (viewName === "data") { renderBedFilterChips(); fetchLogs(); }
     if (viewName === "formulas") fetchFormulas();
 }
 
 // --- 9. Beds (Home Screen) ---
+function lastActivityLabel(lastActivity) {
+    if (!lastActivity || !lastActivity.date) return null;
+    const label = CATEGORY_LABEL[lastActivity.type] || lastActivity.type;
+    const days  = daysSince(lastActivity.date);
+    if (days === 0) return `Last: ${label} today`;
+    if (days === 1) return `Last: ${label} yesterday`;
+    return `Last: ${label} ${days}d ago`;
+}
+
 function daysSince(dateStr) {
     const planted = new Date(dateStr);
     const today   = new Date();
@@ -333,7 +344,9 @@ function renderBeds(beds) {
 
     if (growing.length) {
         html += `<p class="bed-group-label">Growing (${growing.length})</p>`;
-        html += growing.map(bed => `
+        html += growing.map(bed => {
+        const lastLine = lastActivityLabel(bed.lastActivity);
+        return `
         <div class="batch-card bed-card-clickable" onclick="openBedDetail(${bed.bedNumber})">
             <div class="bed-card-header">
                 <p class="batch-title">Bed ${bed.bedNumber}</p>
@@ -346,19 +359,25 @@ function renderBeds(beds) {
                     <span class="bed-day-badge">Day ${daysSince(c.plantingDate)}</span>
                 </div>`).join("")}
             </div>
-        </div>`).join("");
+            ${lastLine ? `<p class="bed-last-activity">${escapeHtml(lastLine)}</p>` : ""}
+        </div>`;
+    }).join("");
     }
 
     if (empty.length) {
         html += `<p class="bed-group-label" style="margin-top:16px;">Empty (${empty.length})</p>`;
-        html += empty.map(bed => `
+        html += empty.map(bed => {
+            const lastLine = lastActivityLabel(bed.lastActivity);
+            return `
         <div class="batch-card bed-card-empty bed-card-clickable" onclick="openBedDetail(${bed.bedNumber})">
             <div class="bed-card-header">
                 <p class="batch-title" style="color:#888;">Bed ${bed.bedNumber}</p>
                 <span class="bed-chevron">›</span>
             </div>
             <p class="bed-empty-label">Ready to sow</p>
-        </div>`).join("");
+            ${lastLine ? `<p class="bed-last-activity">${escapeHtml(lastLine)}</p>` : ""}
+        </div>`;
+        }).join("");
     }
 
     container.innerHTML = html;

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'farmlog-cache-v5';
+const CACHE_NAME = 'farmlog-cache-v6';
 
 // These are the files the phone will download and save for offline use
 const urlsToCache = [

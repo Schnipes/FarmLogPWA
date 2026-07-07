@@ -180,7 +180,11 @@ function handleSubmit(event) {
                 harvestDate: date,
                 status:      "done"
             });
+            // Optimistically remove crop from local bed state
+            const bed = bedsData.find(b => String(b.bedNumber) === String(bedScope));
+            if (bed) bed.crops = bed.crops.filter(c => c.cropName !== cb.value);
         });
+        renderBeds(bedsData);
     }
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(queue));

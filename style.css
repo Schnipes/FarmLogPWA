@@ -550,6 +550,41 @@ textarea {
   margin: 0;
 }
 
+/* ---------- Bed crop history ---------- */
+.bed-history-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #999;
+  margin: 16px 0 8px;
+}
+
+.bed-history-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.bed-history-row:last-child {
+  border-bottom: none;
+}
+
+.bed-history-crop {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.bed-history-meta {
+  font-size: 12px;
+  color: #888;
+  text-align: right;
+}
+
 /* ---------- Bed cards ---------- */
 .bed-crops {
   margin-top: 8px;

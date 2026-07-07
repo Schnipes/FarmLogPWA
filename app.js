@@ -394,10 +394,12 @@ function openBedDetail(bedNum) {
     document.getElementById("bedDetailTitle").textContent = "Bed " + bedNum;
 
     const content = document.getElementById("bedDetailContent");
+    let html = "";
+
     if (!bed.crops.length) {
-        content.innerHTML = '<p style="color:#888;padding:12px 0 8px;">Empty — ready to sow.</p>';
+        html += '<p style="color:#888;padding:12px 0 8px;">Empty — ready to sow.</p>';
     } else {
-        content.innerHTML = bed.crops.map(c => `
+        html += bed.crops.map(c => `
         <div class="bed-detail-crop">
             <div class="bed-detail-row">
                 <span class="bed-detail-icon">🌱</span>
@@ -409,6 +411,23 @@ function openBedDetail(bedNum) {
             </div>
         </div>`).join("");
     }
+
+    if (bed.cropHistory && bed.cropHistory.length) {
+        html += `<p class="bed-history-label">Past crops</p>`;
+        html += bed.cropHistory.map(c => {
+            const days = c.plantingDate && c.harvestDate
+                ? Math.round((new Date(c.harvestDate) - new Date(c.plantingDate)) / 86400000)
+                : null;
+            const harvestStr = c.harvestDate ? shortDate(c.harvestDate) : "—";
+            return `
+            <div class="bed-history-row">
+                <span class="bed-history-crop">${escapeHtml(c.cropName)}</span>
+                <span class="bed-history-meta">${days !== null ? days + " days · " : ""}Harvested ${harvestStr}</span>
+            </div>`;
+        }).join("");
+    }
+
+    content.innerHTML = html;
 
     document.getElementById("bedDetailOverlay").classList.add("open");
     document.body.style.overflow = "hidden";

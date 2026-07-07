@@ -200,13 +200,14 @@ function renderLogs(logs) {
                 ${log.costRM    ? `<span>Cost: RM ${parseFloat(log.costRM).toFixed(2)}</span>`    : ""}
                 ${log.revenueRM ? `<span>Revenue: RM ${parseFloat(log.revenueRM).toFixed(2)}</span>` : ""}
             </div>` : "";
+        const dateDisplay = log.date ? log.date.toString().slice(0, 10) : "";
         return `
         <div class="log-card">
             <div class="log-header">
                 <span class="log-icon">${icon}</span>
                 <div class="log-meta">
                     <p class="log-title">${label}</p>
-                    <p class="log-date">${log.date} &middot; <span class="tag ${isHome ? "home" : ""}">${isHome ? "Home" : "Commercial"}</span></p>
+                    <p class="log-date">${dateDisplay} &middot; <span class="tag ${isHome ? "home" : ""}">${isHome ? "Home" : "Commercial"}</span></p>
                 </div>
             </div>
             ${log.inputsUsed ? `<p class="log-inputs">${log.inputsUsed}</p>` : ""}

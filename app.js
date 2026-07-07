@@ -1,27 +1,41 @@
 // --- 1. Configuration ---
-const STORAGE_KEY = "offline_farm_logs";
+const STORAGE_KEY      = "offline_farm_logs";
+const BEDS_CACHE_KEY   = "farmlog_beds_cache";
+const FORMULAS_CACHE_KEY = "farmlog_formulas_cache";
+const LOGS_CACHE_KEY   = "farmlog_logs_cache";
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyQSzKWjoj3rD4_d045XN4csdYW5VXIHxV9qHviMBUc7iJvacGRHHuBLQPUTecMCBmswQ/exec";
 
 const MODAL_TITLES = {
-    water: "Log fertigation / watering",
-    pest:  "Log pest / treatment",
+    water:   "Log fertigation / watering",
+    pest:    "Log pest / treatment",
     harvest: "Log harvest / sale",
-    crop:  "Log crop action"
+    crop:    "Log crop action"
 };
 
 const DEFAULT_CATEGORY = {
-    water: "watering",
-    pest:  "pest_control",
+    water:   "watering",
+    pest:    "pest_control",
     harvest: "harvest",
-    crop:  "sowing"
+    crop:    "sowing"
 };
 
 const CATEGORY_ICON  = { watering: "💧", pest_control: "🐛", harvest: "🧺", sowing: "🌱" };
 const CATEGORY_LABEL = { watering: "Watering", pest_control: "Pest Control", harvest: "Harvest", sowing: "Sowing" };
 
-let bedsData = [];
+let bedsData         = [];
+let selectedBedForLog = null;
+let addBedPending    = false;
 
-// --- 2. Toast ---
+// --- 2. Utilities ---
+function escapeHtml(str) {
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
 function showToast(msg) {
     const toast = document.getElementById("toast");
     toast.textContent = msg;
@@ -51,8 +65,11 @@ function closeModal() {
     document.getElementById("modalOverlay").classList.remove("open");
     document.body.style.overflow = "";
     document.getElementById("logForm").reset();
-    document.getElementById("currentCropsField").hidden = true;
-    document.getElementById("newCropField").hidden = true;
+    document.getElementById("currentCropsField").hidden  = true;
+    document.getElementById("harvestCropsField").hidden  = true;
+    document.getElementById("newCropField").hidden       = true;
+    document.getElementById("logDate").classList.remove("invalid");
+    document.getElementById("activityCategory").classList.remove("invalid");
 }
 
 document.getElementById("modalOverlay").addEventListener("click", function (e) {
@@ -78,7 +95,6 @@ function updateBedFields() {
     const isHarvest  = activity === "harvest";
     const isSpecific = scope !== "all";
 
-    // Hide all conditional fields first
     document.getElementById("currentCropsField").hidden  = true;
     document.getElementById("harvestCropsField").hidden  = true;
     document.getElementById("newCropField").hidden       = true;
@@ -97,8 +113,8 @@ function updateBedFields() {
         if (bed && bed.crops.length) {
             list.innerHTML = bed.crops.map((c, i) => `
             <label class="harvest-crop-check">
-                <input type="checkbox" name="harvestCrop" value="${c.cropName}" id="hcrop_${i}">
-                <span>${c.cropName}</span>
+                <input type="checkbox" name="harvestCrop" value="${escapeHtml(c.cropName)}" id="hcrop_${i}">
+                <span>${escapeHtml(c.cropName)}</span>
             </label>`).join("");
             document.getElementById("harvestCropsField").hidden = false;
         }
@@ -106,7 +122,7 @@ function updateBedFields() {
     } else {
         const tags = document.getElementById("currentCropsTags");
         tags.innerHTML = (bed && bed.crops.length)
-            ? bed.crops.map(c => `<span class="tag">${c.cropName}</span>`).join("")
+            ? bed.crops.map(c => `<span class="tag">${escapeHtml(c.cropName)}</span>`).join("")
             : '<span style="color:#888;font-size:13px;">Empty bed</span>';
         document.getElementById("currentCropsField").hidden = false;
     }
@@ -135,10 +151,20 @@ function updateSyncBadge() {
 function handleSubmit(event) {
     event.preventDefault();
 
-    const bedScope   = document.getElementById("bedScope").value;
-    const activity   = document.getElementById("activityCategory").value;
-    const cropName   = document.getElementById("newCropName").value.trim();
-    const date       = document.getElementById("logDate").value;
+    const date     = document.getElementById("logDate").value;
+    const activity = document.getElementById("activityCategory").value;
+
+    const dateEl     = document.getElementById("logDate");
+    const activityEl = document.getElementById("activityCategory");
+    dateEl.classList.toggle("invalid", !date);
+    activityEl.classList.toggle("invalid", !activity);
+    if (!date || !activity) {
+        showToast("Please fill in the required fields.");
+        return;
+    }
+
+    const bedScope = document.getElementById("bedScope").value;
+    const cropName = document.getElementById("newCropName").value.trim();
 
     const entry = {
         action:           "addLog",
@@ -155,7 +181,6 @@ function handleSubmit(event) {
     const queue = getOfflineLogs();
     queue.push(entry);
 
-    // Sowing on a specific bed also creates a new batch record
     if (activity === "sowing" && bedScope !== "all" && cropName) {
         queue.push({
             action:       "addBatch",
@@ -168,7 +193,6 @@ function handleSubmit(event) {
         });
     }
 
-    // Harvest — mark checked crops as done
     if (activity === "harvest" && bedScope !== "all") {
         const checked = [...document.querySelectorAll('input[name="harvestCrop"]:checked')];
         checked.forEach(cb => {
@@ -180,7 +204,6 @@ function handleSubmit(event) {
                 harvestDate: date,
                 status:      "done"
             });
-            // Optimistically remove crop from local bed state
             const bed = bedsData.find(b => String(b.bedNumber) === String(bedScope));
             if (bed) bed.crops = bed.crops.filter(c => c.cropName !== cb.value);
         });
@@ -262,7 +285,7 @@ function renderBeds(beds) {
             <div class="bed-crops">
                 ${bed.crops.map(c => `
                 <div class="bed-crop-row">
-                    <span>🌱 ${c.cropName}</span>
+                    <span>🌱 ${escapeHtml(c.cropName)}</span>
                     <span class="bed-day-badge">Day ${daysSince(c.plantingDate)}</span>
                 </div>`).join("")}
             </div>
@@ -288,6 +311,7 @@ function openBedDetail(bedNum) {
     const bed = bedsData.find(b => String(b.bedNumber) === String(bedNum));
     if (!bed) return;
 
+    selectedBedForLog = bedNum;
     document.getElementById("bedDetailTitle").textContent = "Bed " + bedNum;
 
     const content = document.getElementById("bedDetailContent");
@@ -299,15 +323,14 @@ function openBedDetail(bedNum) {
             <div class="bed-detail-row">
                 <span class="bed-detail-icon">🌱</span>
                 <div class="bed-detail-info">
-                    <p class="bed-detail-name">${c.cropName}</p>
-                    <p class="bed-detail-meta">Planted ${c.plantingDate}</p>
+                    <p class="bed-detail-name">${escapeHtml(c.cropName)}</p>
+                    <p class="bed-detail-meta">Planted ${escapeHtml(c.plantingDate)}</p>
                 </div>
                 <span class="bed-day-badge">Day ${daysSince(c.plantingDate)}</span>
             </div>
         </div>`).join("");
     }
 
-    document.getElementById("bedDetailLogBtn").dataset.bed = bedNum;
     document.getElementById("bedDetailOverlay").classList.add("open");
     document.body.style.overflow = "hidden";
 }
@@ -317,11 +340,10 @@ function closeBedDetail() {
     document.body.style.overflow = "";
 }
 
-function logForBed() {
-    const bedNum = document.getElementById("bedDetailLogBtn").dataset.bed;
+function logForBed(type) {
     closeBedDetail();
-    openModal("water");
-    document.getElementById("bedScope").value = bedNum;
+    openModal(type);
+    document.getElementById("bedScope").value = selectedBedForLog;
     updateBedFields();
 }
 
@@ -330,6 +352,10 @@ document.getElementById("bedDetailOverlay").addEventListener("click", function(e
 });
 
 function addBed() {
+    if (addBedPending) return;
+    addBedPending = true;
+    setTimeout(() => { addBedPending = false; }, 2000);
+
     const nextNum = bedsData.length > 0
         ? Math.max(...bedsData.map(b => Number(b.bedNumber))) + 1
         : 1;
@@ -342,12 +368,10 @@ function addBed() {
         status:    "active"
     };
 
-    // Optimistically update local state
     bedsData.push({ bedNumber: nextNum, location: "commercial", crops: [] });
     renderBeds(bedsData);
     populateBedDropdown();
 
-    // Queue and sync
     const queue = getOfflineLogs();
     queue.push(newBed);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(queue));
@@ -357,11 +381,20 @@ function addBed() {
 }
 
 async function fetchBeds() {
+    const cached = localStorage.getItem(BEDS_CACHE_KEY);
+    if (cached) {
+        try {
+            bedsData = JSON.parse(cached);
+            renderBeds(bedsData);
+            populateBedDropdown();
+        } catch (e) { /* ignore corrupt cache */ }
+    }
     try {
         const res  = await fetch(GOOGLE_SCRIPT_URL + "?action=getBeds");
         const data = await res.json();
         if (data.beds) {
             bedsData = data.beds;
+            localStorage.setItem(BEDS_CACHE_KEY, JSON.stringify(data.beds));
             renderBeds(bedsData);
             populateBedDropdown();
         }
@@ -380,23 +413,32 @@ function renderFormulas(formulas) {
     container.innerHTML = formulas.map(f => `
         <div class="formula-card">
             <div class="formula-header">
-                <p class="formula-name">${f.name}</p>
-                ${f.category ? `<span class="tag">${f.category}</span>` : ""}
+                <p class="formula-name">${escapeHtml(f.name)}</p>
+                ${f.category ? `<span class="tag">${escapeHtml(f.category)}</span>` : ""}
             </div>
-            ${f.description ? `<p class="formula-desc">${f.description}</p>` : ""}
-            ${f.recipe ? `<pre class="formula-recipe">${f.recipe}</pre>` : ""}
+            ${f.description ? `<p class="formula-desc">${escapeHtml(f.description)}</p>` : ""}
+            ${f.recipe ? `<pre class="formula-recipe">${escapeHtml(f.recipe)}</pre>` : ""}
         </div>`).join("");
 }
 
 async function fetchFormulas() {
     const container = document.getElementById("formulaList");
-    container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">Loading formulas...</p>';
+    const cached = localStorage.getItem(FORMULAS_CACHE_KEY);
+    if (cached) {
+        try { renderFormulas(JSON.parse(cached)); } catch (e) { /* ignore */ }
+    } else {
+        container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">Loading formulas...</p>';
+    }
     try {
-        const res  = await fetch(GOOGLE_SCRIPT_URL + "?action=getFormulas");
-        const data = await res.json();
-        renderFormulas(data.formulas || []);
+        const res     = await fetch(GOOGLE_SCRIPT_URL + "?action=getFormulas");
+        const data    = await res.json();
+        const formulas = data.formulas || [];
+        localStorage.setItem(FORMULAS_CACHE_KEY, JSON.stringify(formulas));
+        renderFormulas(formulas);
     } catch (e) {
-        container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">Could not load formulas.</p>';
+        if (!cached) {
+            container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">Could not load formulas.</p>';
+        }
     }
 }
 
@@ -409,14 +451,15 @@ function renderLogs(logs) {
     }
     container.innerHTML = logs.map(log => {
         const icon        = CATEGORY_ICON[log.activityCategory]  || "📝";
-        const label       = CATEGORY_LABEL[log.activityCategory] || log.activityCategory;
+        const label       = CATEGORY_LABEL[log.activityCategory] || escapeHtml(log.activityCategory);
         const dateDisplay = log.date ? log.date.toString().slice(0, 10) : "";
-        const scopeLabel  = log.bedNumber && log.bedNumber !== "all" ? `Bed ${log.bedNumber}` : "Whole Farm";
-        const cropLine    = log.cropName ? `<p class="log-inputs">🌱 ${log.cropName}</p>` : "";
-        const inputLine   = log.inputsUsed ? `<p class="log-inputs">${log.inputsUsed}</p>` : "";
+        const bedNum      = log.bedNumber && log.bedNumber !== "all" ? log.bedNumber : null;
+        const scopeLabel  = bedNum ? `Bed ${escapeHtml(String(bedNum))}` : "Whole Farm";
+        const cropLine    = log.cropName  ? `<p class="log-inputs">🌱 ${escapeHtml(log.cropName)}</p>`   : "";
+        const inputLine   = log.inputsUsed ? `<p class="log-inputs">${escapeHtml(log.inputsUsed)}</p>` : "";
         const financials  = (log.costRM || log.revenueRM) ? `
             <div class="log-financials">
-                ${log.costRM    ? `<span>Cost: RM ${parseFloat(log.costRM).toFixed(2)}</span>` : ""}
+                ${log.costRM    ? `<span>Cost: RM ${parseFloat(log.costRM).toFixed(2)}</span>`    : ""}
                 ${log.revenueRM ? `<span>Revenue: RM ${parseFloat(log.revenueRM).toFixed(2)}</span>` : ""}
             </div>` : "";
         return `
@@ -435,17 +478,26 @@ function renderLogs(logs) {
 
 async function fetchLogs() {
     const container = document.getElementById("logList");
-    container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">Loading logs...</p>';
+    const cached = localStorage.getItem(LOGS_CACHE_KEY);
+    if (cached) {
+        try { renderLogs(JSON.parse(cached)); } catch (e) { /* ignore */ }
+    } else {
+        container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">Loading logs...</p>';
+    }
     try {
         const res  = await fetch(GOOGLE_SCRIPT_URL + "?action=getLogs");
         const data = await res.json();
-        renderLogs(data.logs || []);
+        const logs = data.logs || [];
+        localStorage.setItem(LOGS_CACHE_KEY, JSON.stringify(logs));
+        renderLogs(logs);
     } catch (e) {
-        container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">Could not load logs.</p>';
+        if (!cached) {
+            container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">Could not load logs.</p>';
+        }
     }
 }
 
-// --- 10. App Initialization ---
+// --- 11. App Initialization ---
 window.addEventListener("online", processOfflineQueue);
 
 document.addEventListener("DOMContentLoaded", () => {

@@ -649,6 +649,19 @@ textarea {
   border: none;
 }
 
+/* ---------- Bed detail — activity picker ---------- */
+.bed-log-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.bed-log-actions .action-btn {
+  min-height: 72px;
+  font-size: 14px;
+}
+
 /* ---------- Validation error state ---------- */
 input.invalid,
 select.invalid,

@@ -3,9 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#1a8f3c">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <title>FarmLog</title>
   <link rel="stylesheet" href="style.css">
   <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
 </head>
 <body>
 
@@ -164,9 +168,20 @@
         <button class="modal-close" onclick="closeBedDetail()" aria-label="Close">✕</button>
       </div>
       <div id="bedDetailContent"></div>
-      <button class="submit-btn" id="bedDetailLogBtn" style="margin-top:16px;" onclick="logForBed()">
-        Log activity for this bed
-      </button>
+      <div class="bed-log-actions">
+        <button class="action-btn water" onclick="logForBed('water')">
+          <span class="icon" aria-hidden="true">💧</span><span>Water</span>
+        </button>
+        <button class="action-btn pest" onclick="logForBed('pest')">
+          <span class="icon" aria-hidden="true">🐛</span><span>Pest</span>
+        </button>
+        <button class="action-btn harvest" onclick="logForBed('harvest')">
+          <span class="icon" aria-hidden="true">🧺</span><span>Harvest</span>
+        </button>
+        <button class="action-btn crop" onclick="logForBed('crop')">
+          <span class="icon" aria-hidden="true">🌱</span><span>Sow</span>
+        </button>
+      </div>
     </div>
   </div>
 

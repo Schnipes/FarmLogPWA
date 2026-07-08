@@ -5,6 +5,7 @@ const FORMULAS_CACHE_KEY = "farmlog_formulas_cache";
 const LOGS_CACHE_KEY     = "farmlog_logs_cache";
 const SALES_CACHE_KEY    = "farmlog_sales_cache";
 const LAST_BED_KEY       = "farmlog_last_bed";
+const BED_MAX_KEY        = "farmlog_bed_max";
 const GOOGLE_SCRIPT_URL  = "https://script.google.com/macros/s/AKfycbyQSzKWjoj3rD4_d045XN4csdYW5VXIHxV9qHviMBUc7iJvacGRHHuBLQPUTecMCBmswQ/exec";
 
 const MODAL_TITLES = {
@@ -26,6 +27,9 @@ const CATEGORY_LABEL = { watering: "Watering", pest_control: "Pest Control", har
 
 let bedsData          = [];
 let formulasData      = [];
+// Highest bed number ever used (retired beds included). Persisted so numbers
+// are never reused, even across reloads while offline.
+let maxBedNumber      = parseInt(localStorage.getItem(BED_MAX_KEY), 10) || 0;
 let selectedBedForLog = null;
 let addBedPending     = false;
 let activeLogFilter   = "all";
@@ -50,11 +54,14 @@ function showToast(msg) {
 }
 
 // --- 3. Modal Controls ---
-function todayString() {
-    const d = new Date();
+function localDateStr(d) {
     return d.getFullYear() + "-" +
         String(d.getMonth() + 1).padStart(2, "0") + "-" +
         String(d.getDate()).padStart(2, "0");
+}
+
+function todayString() {
+    return localDateStr(new Date());
 }
 
 function openModal(type) {
@@ -88,9 +95,10 @@ function closeModal() {
     document.getElementById("inputsField").hidden        = true;
     document.getElementById("financialsField").hidden    = true;
     document.getElementById("toggleInputsBtn").textContent     = "＋ Add inputs / notes";
-    document.getElementById("toggleFinancialsBtn").textContent = "＋ Add financials";
+    document.getElementById("toggleFinancialsBtn").textContent = "＋ Add cost";
     document.getElementById("logDate").classList.remove("invalid");
     document.getElementById("activityCategory").classList.remove("invalid");
+    document.getElementById("newCropName").classList.remove("invalid");
     document.getElementById("formulaPickerList").hidden = true;
 }
 
@@ -110,7 +118,7 @@ function toggleFinancials() {
     const field = document.getElementById("financialsField");
     const btn   = document.getElementById("toggleFinancialsBtn");
     field.hidden = !field.hidden;
-    btn.textContent = field.hidden ? "＋ Add financials" : "− Remove financials";
+    btn.textContent = field.hidden ? "＋ Add cost" : "− Remove cost";
 }
 
 // --- 5. Form — Bed & Crop Fields ---
@@ -174,7 +182,7 @@ function updateBedFields() {
         if (bed && bed.crops.length) {
             list.innerHTML = bed.crops.map((c, i) => `
             <label class="harvest-crop-check">
-                <input type="checkbox" name="harvestCrop" value="${escapeHtml(c.cropName)}" id="hcrop_${i}">
+                <input type="checkbox" name="harvestCrop" value="${escapeHtml(String(c.id || ""))}" data-crop="${escapeHtml(c.cropName)}" id="hcrop_${i}">
                 <span>${escapeHtml(c.cropName)}</span>
             </label>`).join("");
             document.getElementById("harvestCropsField").hidden = false;
@@ -191,6 +199,10 @@ function updateBedFields() {
 }
 
 // --- 6. Offline Storage ---
+function saveBeds() {
+    localStorage.setItem(BEDS_CACHE_KEY, JSON.stringify(bedsData));
+}
+
 function queueAction(payload) {
     const queue = getOfflineLogs();
     queue.push(payload);
@@ -235,6 +247,13 @@ function handleSubmit(event) {
     const bedScope = document.getElementById("bedScope").value;
     const cropName = document.getElementById("newCropName").value.trim();
 
+    // Sowing must name a crop — otherwise we'd log a useless entry with no batch.
+    if (activity === "sowing" && !cropName) {
+        document.getElementById("newCropName").classList.add("invalid");
+        showToast("Please enter the crop being sown.");
+        return;
+    }
+
     const entry = {
         action:           "addLog",
         id:               "log_" + Date.now(),
@@ -248,7 +267,7 @@ function handleSubmit(event) {
         })(),
         inputsUsed:       document.getElementById("inputsUsed").value,
         costRM:           document.getElementById("costRM").value,
-        revenueRM:        document.getElementById("revenueRM").value,
+        revenueRM:        "",
         weight:           activity === "harvest" ? document.getElementById("harvestWeight").value : ""
     };
 
@@ -256,18 +275,21 @@ function handleSubmit(event) {
     queue.push(entry);
 
     if (activity === "sowing" && bedScope !== "all" && cropName) {
+        const batchId = "batch_" + Date.now();
         queue.push({
             action:       "addBatch",
-            id:           "batch_" + Date.now(),
+            id:           batchId,
             bedNumber:    bedScope,
             cropName,
             location:     "commercial",
             plantingDate: date,
             status:       "active"
         });
-        // Optimistic update — add crop to bed immediately
+        // Optimistic update — add crop to bed immediately (carry the batch id
+        // so it can be harvested precisely before the next refetch).
         const bed = bedsData.find(b => String(b.bedNumber) === String(bedScope));
-        if (bed) bed.crops.push({ cropName, plantingDate: date });
+        if (bed) bed.crops.push({ id: batchId, cropName, plantingDate: date });
+        saveBeds();
         renderBeds(bedsData);
         populateBedDropdown();
     }
@@ -275,17 +297,26 @@ function handleSubmit(event) {
     if (activity === "harvest" && bedScope !== "all") {
         const checked = [...document.querySelectorAll('input[name="harvestCrop"]:checked')];
         checked.forEach(cb => {
+            const batchId = cb.value;
+            const cropNm  = cb.dataset.crop;
             queue.push({
                 action:      "updateBatch",
-                id:          "update_" + Date.now() + "_" + cb.value,
+                id:          batchId,      // target this exact batch (handles duplicate crop names)
                 bedNumber:   bedScope,
-                cropName:    cb.value,
+                cropName:    cropNm,
                 harvestDate: date,
                 status:      "done"
             });
             const bed = bedsData.find(b => String(b.bedNumber) === String(bedScope));
-            if (bed) bed.crops = bed.crops.filter(c => c.cropName !== cb.value);
+            if (bed) {
+                // Remove the specific batch; fall back to name if id is missing
+                // (crop sown this session, not yet refetched with an id).
+                bed.crops = batchId
+                    ? bed.crops.filter(c => String(c.id) !== String(batchId))
+                    : bed.crops.filter(c => c.cropName !== cropNm);
+            }
         });
+        saveBeds();
         renderBeds(bedsData);
     }
 
@@ -298,6 +329,7 @@ function handleSubmit(event) {
         const bed = bedsData.find(b => String(b.bedNumber) === String(bedScope));
         if (bed) {
             bed.lastActivity = { type: activity, date };
+            saveBeds();
             renderBeds(bedsData);
         }
     }
@@ -313,27 +345,37 @@ function handleSubmit(event) {
 }
 
 // --- 7. Cloud Sync ---
-async function processOfflineQueue() {
-    if (!navigator.onLine) return;
-    let queue = getOfflineLogs();
-    if (!queue.length) return;
+let isSyncing = false;
 
-    while (queue.length > 0) {
-        const item = queue[0];
-        try {
-            await fetch(GOOGLE_SCRIPT_URL, {
-                method: "POST",
-                mode:   "no-cors",
-                headers: { "Content-Type": "application/json" },
-                body:   JSON.stringify(item)
-            });
-            queue.shift();
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(queue));
+async function processOfflineQueue() {
+    // Lock: prevent overlapping drains from double-POSTing or clobbering the queue.
+    if (isSyncing || !navigator.onLine) return;
+    isSyncing = true;
+    try {
+        while (true) {
+            const queue = getOfflineLogs();
+            if (!queue.length) break;
+            const item = queue[0];
+            try {
+                await fetch(GOOGLE_SCRIPT_URL, {
+                    method: "POST",
+                    mode:   "no-cors",
+                    headers: { "Content-Type": "application/json" },
+                    body:   JSON.stringify(item)
+                });
+            } catch (err) {
+                console.error("Sync failed, will retry later.", err);
+                break;
+            }
+            // Re-read fresh: actions queued during the await must survive.
+            // FIFO + append-only means index 0 is still the item we just sent.
+            const fresh = getOfflineLogs();
+            fresh.shift();
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
             updateSyncBadge();
-        } catch (err) {
-            console.error("Sync failed, will retry later.", err);
-            break;
         }
+    } finally {
+        isSyncing = false;
     }
 }
 
@@ -513,7 +555,7 @@ function saveBedName() {
     if (!bed) return;
 
     bed.name = name;
-    localStorage.setItem(BEDS_CACHE_KEY, JSON.stringify(bedsData));
+    saveBeds();
     renderBeds(bedsData);
 
     const label = name ? `Bed ${bed.bedNumber} · ${name}` : `Bed ${bed.bedNumber}`;
@@ -532,7 +574,7 @@ function deleteBed() {
     if (!confirm(`Retire ${label}? It will be hidden from the home screen.`)) return;
 
     bedsData = bedsData.filter(b => String(b.bedNumber) !== String(selectedBedForLog));
-    localStorage.setItem(BEDS_CACHE_KEY, JSON.stringify(bedsData));
+    saveBeds();
     renderBeds(bedsData);
     populateBedDropdown();
     closeBedDetail();
@@ -558,9 +600,11 @@ function addBed() {
     addBedPending = true;
     setTimeout(() => { addBedPending = false; }, 2000);
 
-    const nextNum = bedsData.length > 0
-        ? Math.max(...bedsData.map(b => Number(b.bedNumber))) + 1
-        : 1;
+    // Never reuse a number: take the max of visible beds and the highest
+    // number ever used (retired beds included, tracked in maxBedNumber).
+    const nextNum = Math.max(maxBedNumber, ...bedsData.map(b => Number(b.bedNumber)), 0) + 1;
+    maxBedNumber = nextNum;
+    localStorage.setItem(BED_MAX_KEY, String(maxBedNumber));
 
     const newBed = {
         action:    "addBed",
@@ -571,6 +615,7 @@ function addBed() {
     };
 
     bedsData.push({ bedNumber: nextNum, location: "commercial", crops: [] });
+    saveBeds();
     renderBeds(bedsData);
     populateBedDropdown();
 
@@ -598,6 +643,10 @@ async function fetchBeds() {
         if (data.beds) {
             bedsData = data.beds;
             localStorage.setItem(BEDS_CACHE_KEY, JSON.stringify(data.beds));
+            if (typeof data.maxBedNumber === "number") {
+                maxBedNumber = Math.max(maxBedNumber, data.maxBedNumber);
+                localStorage.setItem(BED_MAX_KEY, String(maxBedNumber));
+            }
             renderBeds(bedsData);
             populateBedDropdown();
             renderBedFilterChips();
@@ -958,7 +1007,7 @@ function renderFinancialSummary() {
     const sales = JSON.parse(localStorage.getItem(SALES_CACHE_KEY) || "[]");
     const logs  = JSON.parse(localStorage.getItem(LOGS_CACHE_KEY)  || "[]");
 
-    const startStr = start.toISOString().slice(0, 10);
+    const startStr = localDateStr(start);
 
     const revenue = sales
         .filter(s => s.date && s.date.toString().slice(0, 10) >= startStr)
@@ -1156,7 +1205,7 @@ async function handleFormulaSubmit(e) {
         const updated  = [newEntry, ...formulasData];
         localStorage.setItem(FORMULAS_CACHE_KEY, JSON.stringify(updated));
         renderFormulas(updated);
-        queueAction({ action: "addFormula", ...formula });
+        queueAction({ action: "addFormula", id: newEntry.id, ...formula });
         showToast(`Formula added`);
     }
 
@@ -1180,9 +1229,12 @@ window.addEventListener("online", processOfflineQueue);
 
 document.addEventListener("DOMContentLoaded", () => {
     updateSyncBadge();
-    processOfflineQueue();
-    fetchBeds();
-    fetchFormulas();
+    // Drain pending offline actions before fetching, so the server GET doesn't
+    // overwrite the cache with state that's missing our unsynced changes.
+    processOfflineQueue().finally(() => {
+        fetchBeds();
+        fetchFormulas();
+    });
 
     document.getElementById("activityCategory").addEventListener("change", updateBedFields);
     document.getElementById("bedScope").addEventListener("change", updateBedFields);

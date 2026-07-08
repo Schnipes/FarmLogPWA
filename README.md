@@ -11,13 +11,15 @@ An offline-first Progressive Web App for managing and logging daily activity on 
 - Watering alerts — bed cards flag beds not watered in 3+ days
 - Tap a bed to see crop details, past crop history, and log actions
 - Add new beds directly from the app
+- Rename a bed (e.g. "Kangkong Row") or retire one (hidden from home, kept in records)
 
 **Activity Logging**
 - Log irrigation, pest control, harvest, and sowing per bed or whole farm
 - Harvest marks crops as done and removes them from the active bed
+- Optional harvest weight (kg) for yield tracking
 - Sowing adds a new crop batch to the bed immediately
 - Optional inputs/notes with formula picker (see Formulas)
-- Optional cost and revenue per activity
+- Optional cost per activity
 - Pull-to-refresh: swipe down to sync latest data
 
 **Sales**
@@ -65,9 +67,9 @@ Create a Google Spreadsheet with these sheets and exact camelCase headers:
 
 | Sheet | Headers |
 |---|---|
-| Beds | bedNumber, location, status |
+| Beds | bedNumber, location, status, name |
 | Batches | id, bedNumber, cropName, location, plantingDate, status, harvestDate |
-| Logs | id, date, bedNumber, activityCategory, cropName, inputsUsed, costRM, revenueRM |
+| Logs | id, date, bedNumber, activityCategory, cropName, inputsUsed, costRM, revenueRM, weight |
 | Formulas | id, name, category, description, recipe |
 | Sales | id, date, crop, quantity, unit, pricePerUnit, totalRevenue |
 
@@ -105,7 +107,8 @@ Amounts are per litre — the app multiplies by sprayer volume.
 - `?action=getSales` — all sales sorted newest first
 
 **doPost**
-- `addLog`, `addBed`, `addBatch`, `updateBatch`, `deleteLog`
+- `addLog`, `addBed`, `updateBed`, `deleteBed`
+- `addBatch`, `updateBatch`, `deleteLog`
 - `addSale`, `deleteSale`
 - `addFormula`, `updateFormula`, `deleteFormula`
 

@@ -219,7 +219,7 @@
         <!-- Collapsible extras -->
         <div class="form-extras-toggles">
           <button type="button" class="extras-toggle" id="toggleInputsBtn" onclick="toggleInputs()">＋ Add inputs / notes</button>
-          <button type="button" class="extras-toggle" id="toggleFinancialsBtn" onclick="toggleFinancials()">＋ Add financials</button>
+          <button type="button" class="extras-toggle" id="toggleFinancialsBtn" onclick="toggleFinancials()">＋ Add cost</button>
         </div>
 
         <div class="form-field" id="inputsField" hidden>
@@ -233,10 +233,9 @@
         </div>
 
         <div class="form-field" id="financialsField" hidden>
-          <label>Financials</label>
+          <label for="costRM">Cost (RM)</label>
           <div class="money-row">
             <input type="number" id="costRM" placeholder="Cost (RM)" inputmode="decimal" min="0" step="0.01">
-            <input type="number" id="revenueRM" placeholder="Revenue (RM)" inputmode="decimal" min="0" step="0.01">
           </div>
         </div>
 

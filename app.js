@@ -10,7 +10,7 @@ const GOOGLE_SCRIPT_URL  = "https://script.google.com/macros/s/AKfycbyQSzKWjoj3r
 const MODAL_TITLES = {
     water:   "Irrigation / Fertigation",
     pest:    "Pest Control",
-    harvest: "Harvest & Sale",
+    harvest: "Harvest",
     crop:    "Sow Crop"
 };
 
@@ -131,6 +131,13 @@ function updateBedFields() {
     const isHarvest  = activity === "harvest";
     const isSpecific = scope !== "all";
 
+    // Sowing on whole farm makes no sense — force to first bed if "all" selected
+    if (isSowing && !isSpecific && bedsData.length) {
+        document.getElementById("bedScope").value = bedsData[0].bedNumber;
+        updateBedFields();
+        return;
+    }
+
     document.getElementById("currentCropsField").hidden  = true;
     document.getElementById("harvestCropsField").hidden  = true;
     document.getElementById("newCropField").hidden       = true;
@@ -224,7 +231,11 @@ function handleSubmit(event) {
         date,
         bedNumber:        bedScope,
         activityCategory: activity,
-        cropName:         activity === "sowing" ? cropName : "",
+        cropName:         activity === "sowing" ? cropName : (() => {
+            if (bedScope === "all") return "";
+            const bed = bedsData.find(b => String(b.bedNumber) === String(bedScope));
+            return bed && bed.crops.length ? bed.crops.map(c => c.cropName).join(", ") : "";
+        })(),
         inputsUsed:       document.getElementById("inputsUsed").value,
         costRM:           document.getElementById("costRM").value,
         revenueRM:        document.getElementById("revenueRM").value
@@ -423,7 +434,7 @@ function openBedDetail(bedNum) {
         html += `<p class="bed-history-label">Past crops</p>`;
         html += bed.cropHistory.map(c => {
             const days = c.plantingDate && c.harvestDate
-                ? Math.round((new Date(c.harvestDate) - new Date(c.plantingDate)) / 86400000)
+                ? Math.round((new Date(c.harvestDate + "T00:00:00") - new Date(c.plantingDate + "T00:00:00")) / 86400000)
                 : null;
             const harvestStr = c.harvestDate ? shortDate(c.harvestDate) : "—";
             return `
@@ -669,16 +680,31 @@ function renderCombinedActivity() {
 
 function deleteLogEntry(logId) {
     if (!confirm("Delete this log entry?")) return;
-    const cached = localStorage.getItem(LOGS_CACHE_KEY);
-    if (!cached) return;
-    const logs = JSON.parse(cached).filter(l => String(l.id) !== String(logId));
-    localStorage.setItem(LOGS_CACHE_KEY, JSON.stringify(logs));
-    renderLogs(logs);
-    const queue = getOfflineLogs();
-    queue.push({ action: "deleteLog", logId });
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(queue));
+
+    const isSale = logId.startsWith("sale_");
+
+    if (isSale) {
+        const cached = localStorage.getItem(SALES_CACHE_KEY);
+        if (!cached) return;
+        const sales = JSON.parse(cached).filter(s => String(s.id) !== String(logId));
+        localStorage.setItem(SALES_CACHE_KEY, JSON.stringify(sales));
+        const queue = getOfflineLogs();
+        queue.push({ action: "deleteSale", id: logId });
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(queue));
+    } else {
+        const cached = localStorage.getItem(LOGS_CACHE_KEY);
+        if (!cached) return;
+        const logs = JSON.parse(cached).filter(l => String(l.id) !== String(logId));
+        localStorage.setItem(LOGS_CACHE_KEY, JSON.stringify(logs));
+        const queue = getOfflineLogs();
+        queue.push({ action: "deleteLog", id: logId });
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(queue));
+    }
+
+    renderCombinedActivity();
+    renderFinancialSummary();
     updateSyncBadge();
-    showToast("Log deleted");
+    showToast("Entry deleted");
     processOfflineQueue();
 }
 
@@ -847,12 +873,14 @@ function renderFinancialSummary() {
     const sales = JSON.parse(localStorage.getItem(SALES_CACHE_KEY) || "[]");
     const logs  = JSON.parse(localStorage.getItem(LOGS_CACHE_KEY)  || "[]");
 
+    const startStr = start.toISOString().slice(0, 10);
+
     const revenue = sales
-        .filter(s => s.date && new Date(s.date) >= start)
+        .filter(s => s.date && s.date.toString().slice(0, 10) >= startStr)
         .reduce((sum, s) => sum + (parseFloat(s.totalRevenue) || 0), 0);
 
     const cost = logs
-        .filter(l => l.date && new Date(l.date) >= start && l.costRM)
+        .filter(l => l.date && l.date.toString().slice(0, 10) >= startStr && l.costRM)
         .reduce((sum, l) => sum + (parseFloat(l.costRM) || 0), 0);
 
     const net = revenue - cost;
@@ -865,7 +893,7 @@ function renderFinancialSummary() {
     netEl.className = "fin-value " + (net >= 0 ? "green" : "red");
 }
 
-// --- 13. Sales ---
+// --- 13. Sales Modal ---
 function openSaleModal() {
     document.getElementById("saleDate").value = todayString();
     document.getElementById("saleCrop").value = "";
@@ -947,27 +975,17 @@ function handleSaleSubmit(event) {
     processOfflineQueue();
 
     // Refresh activity tab if visible
-    if (!document.getElementById("view-data").hidden) renderCombinedActivity();
+    if (!document.getElementById("view-data").hidden) {
+        renderCombinedActivity();
+        renderFinancialSummary();
+    }
 }
 
 document.getElementById("saleModalOverlay").addEventListener("click", function(e) {
     if (e.target === this) closeSaleModal();
 });
 
-async function fetchSales() {
-    const cached = localStorage.getItem(SALES_CACHE_KEY);
-    try {
-        const res   = await fetch(GOOGLE_SCRIPT_URL + "?action=getSales");
-        const data  = await res.json();
-        const sales = data.sales || [];
-        localStorage.setItem(SALES_CACHE_KEY, JSON.stringify(sales));
-        return sales;
-    } catch (e) {
-        return cached ? JSON.parse(cached) : [];
-    }
-}
-
-// --- 13. App Initialization ---
+// --- 14. App Initialization ---
 window.addEventListener("online", processOfflineQueue);
 
 document.addEventListener("DOMContentLoaded", () => {

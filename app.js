@@ -82,6 +82,7 @@ function closeModal() {
     document.getElementById("logForm").reset();
     document.getElementById("currentCropsField").hidden  = true;
     document.getElementById("harvestCropsField").hidden  = true;
+    document.getElementById("harvestWeightField").hidden = true;
     document.getElementById("newCropField").hidden       = true;
     document.getElementById("bedContextBar").hidden      = true;
     document.getElementById("inputsField").hidden        = true;
@@ -140,6 +141,7 @@ function updateBedFields() {
 
     document.getElementById("currentCropsField").hidden  = true;
     document.getElementById("harvestCropsField").hidden  = true;
+    document.getElementById("harvestWeightField").hidden = true;
     document.getElementById("newCropField").hidden       = true;
     document.getElementById("newCropName").required      = false;
 
@@ -177,6 +179,7 @@ function updateBedFields() {
             </label>`).join("");
             document.getElementById("harvestCropsField").hidden = false;
         }
+        document.getElementById("harvestWeightField").hidden = false;
 
     } else {
         const tags = document.getElementById("currentCropsTags");
@@ -188,6 +191,13 @@ function updateBedFields() {
 }
 
 // --- 6. Offline Storage ---
+function queueAction(payload) {
+    const queue = getOfflineLogs();
+    queue.push(payload);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(queue));
+    updateSyncBadge();
+}
+
 function getOfflineLogs() {
     const data = localStorage.getItem(STORAGE_KEY);
     return data ? JSON.parse(data) : [];
@@ -238,7 +248,8 @@ function handleSubmit(event) {
         })(),
         inputsUsed:       document.getElementById("inputsUsed").value,
         costRM:           document.getElementById("costRM").value,
-        revenueRM:        document.getElementById("revenueRM").value
+        revenueRM:        document.getElementById("revenueRM").value,
+        weight:           activity === "harvest" ? document.getElementById("harvestWeight").value : ""
     };
 
     const queue = getOfflineLogs();
@@ -392,7 +403,7 @@ function renderBeds(beds) {
         return `
         <div class="batch-card bed-card-clickable" onclick="openBedDetail(${bed.bedNumber})">
             <div class="bed-card-header">
-                <p class="batch-title">Bed ${bed.bedNumber}</p>
+                <p class="batch-title">Bed ${bed.bedNumber}${bed.name ? ` <span class="bed-custom-name">· ${escapeHtml(bed.name)}</span>` : ""}</p>
                 <span class="bed-chevron">›</span>
             </div>
             <div class="bed-crops">
@@ -415,7 +426,7 @@ function renderBeds(beds) {
             return `
         <div class="batch-card bed-card-empty bed-card-clickable" onclick="openBedDetail(${bed.bedNumber})">
             <div class="bed-card-header">
-                <p class="batch-title" style="color:#888;">Bed ${bed.bedNumber}</p>
+                <p class="batch-title" style="color:#888;">Bed ${bed.bedNumber}${bed.name ? ` <span class="bed-custom-name">· ${escapeHtml(bed.name)}</span>` : ""}</p>
                 <span class="bed-chevron">›</span>
             </div>
             <p class="bed-empty-label">Ready to sow</p>
@@ -432,7 +443,8 @@ function openBedDetail(bedNum) {
     if (!bed) return;
 
     selectedBedForLog = bedNum;
-    document.getElementById("bedDetailTitle").textContent = "Bed " + bedNum;
+    const bedLabel = bed.name ? `Bed ${bedNum} · ${bed.name}` : `Bed ${bedNum}`;
+    document.getElementById("bedDetailTitle").textContent = bedLabel;
 
     const content = document.getElementById("bedDetailContent");
     let html = "";
@@ -481,7 +493,53 @@ function openBedDetail(bedNum) {
 
 function closeBedDetail() {
     document.getElementById("bedDetailOverlay").classList.remove("open");
+    document.getElementById("bedRenameRow").hidden = true;
     document.body.style.overflow = "";
+}
+
+function toggleBedRename() {
+    const row = document.getElementById("bedRenameRow");
+    row.hidden = !row.hidden;
+    if (!row.hidden) {
+        const bed = bedsData.find(b => String(b.bedNumber) === String(selectedBedForLog));
+        document.getElementById("bedNameInput").value = bed?.name || "";
+        document.getElementById("bedNameInput").focus();
+    }
+}
+
+function saveBedName() {
+    const name = document.getElementById("bedNameInput").value.trim();
+    const bed  = bedsData.find(b => String(b.bedNumber) === String(selectedBedForLog));
+    if (!bed) return;
+
+    bed.name = name;
+    localStorage.setItem(BEDS_CACHE_KEY, JSON.stringify(bedsData));
+    renderBeds(bedsData);
+
+    const label = name ? `Bed ${bed.bedNumber} · ${name}` : `Bed ${bed.bedNumber}`;
+    document.getElementById("bedDetailTitle").textContent = label;
+    document.getElementById("bedRenameRow").hidden = true;
+
+    queueAction({ action: "updateBed", bedNumber: bed.bedNumber, name });
+    processOfflineQueue();
+    showToast(name ? `Renamed to "${name}"` : "Name cleared");
+}
+
+function deleteBed() {
+    const bed = bedsData.find(b => String(b.bedNumber) === String(selectedBedForLog));
+    if (!bed) return;
+    const label = bed.name ? `Bed ${bed.bedNumber} · ${bed.name}` : `Bed ${bed.bedNumber}`;
+    if (!confirm(`Retire ${label}? It will be hidden from the home screen.`)) return;
+
+    bedsData = bedsData.filter(b => String(b.bedNumber) !== String(selectedBedForLog));
+    localStorage.setItem(BEDS_CACHE_KEY, JSON.stringify(bedsData));
+    renderBeds(bedsData);
+    populateBedDropdown();
+    closeBedDetail();
+
+    queueAction({ action: "deleteBed", bedNumber: selectedBedForLog });
+    processOfflineQueue();
+    showToast(`${label} retired`);
 }
 
 function logForBed(type) {

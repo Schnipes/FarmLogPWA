@@ -534,6 +534,76 @@ textarea {
 }
 
 /* ---------- Bed detail modal ---------- */
+.bed-detail-title-wrap {
+  display: flex !important;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.bed-rename-btn {
+  background: none;
+  border: none;
+  font-size: 15px;
+  padding: 2px 4px;
+  cursor: pointer;
+  opacity: 0.6;
+  line-height: 1;
+}
+
+.bed-rename-btn:active { opacity: 1; }
+
+.bed-rename-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 0 0 14px;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 4px;
+}
+
+.bed-rename-row input {
+  flex: 1;
+  margin: 0;
+}
+
+.bed-rename-save-btn {
+  background: var(--color-primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.bed-custom-name {
+  font-weight: 400;
+  color: #888;
+  font-size: 14px;
+}
+
+.bed-delete-btn {
+  width: 100%;
+  margin-top: 20px;
+  background: none;
+  border: 1px solid #d9534f;
+  color: #d9534f;
+  border-radius: var(--radius);
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: block;
+}
+
+.bed-delete-btn:active {
+  background: #fdf2f2;
+}
+
+
 .bed-detail-crop {
   padding: 14px 0;
   border-bottom: 1px solid var(--color-border);

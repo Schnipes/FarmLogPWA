@@ -206,6 +206,11 @@
           <div id="harvestCropsList" class="harvest-crops-list"></div>
         </div>
 
+        <div class="form-field" id="harvestWeightField" hidden>
+          <label for="harvestWeight">Harvest weight (kg) <span style="font-size:11px;color:#888;">optional</span></label>
+          <input type="number" id="harvestWeight" placeholder="0.0" inputmode="decimal" min="0" step="0.1">
+        </div>
+
         <div class="form-field" id="newCropField" hidden>
           <label for="newCropName">Crop being sown</label>
           <input type="text" id="newCropName" placeholder="e.g. Red Amaranth">
@@ -244,8 +249,15 @@
   <div class="modal-overlay" id="bedDetailOverlay">
     <div class="modal-sheet">
       <div class="modal-header">
-        <h2 id="bedDetailTitle">Bed</h2>
+        <div class="bed-detail-title-wrap">
+          <h2 id="bedDetailTitle">Bed</h2>
+          <button class="bed-rename-btn" onclick="toggleBedRename()" aria-label="Rename bed">✏️</button>
+        </div>
         <button class="modal-close" onclick="closeBedDetail()" aria-label="Close">✕</button>
+      </div>
+      <div id="bedRenameRow" class="bed-rename-row" hidden>
+        <input type="text" id="bedNameInput" placeholder="e.g. Kangkong Row">
+        <button class="bed-rename-save-btn" onclick="saveBedName()">Save</button>
       </div>
       <div id="bedDetailContent"></div>
       <div class="bed-log-actions">
@@ -262,6 +274,7 @@
           <span class="icon" aria-hidden="true">🌱</span><span>Sow</span>
         </button>
       </div>
+      <button class="bed-delete-btn" onclick="deleteBed()">Retire this bed</button>
     </div>
   </div>
 

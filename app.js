@@ -340,6 +340,18 @@ function lastActivityLabel(lastActivity) {
     return `Last: ${label} ${days}d ago`;
 }
 
+function wateringAlert(bed) {
+    if (!bed.crops.length) return "";
+    const last = bed.lastActivity;
+    const isWatering = last && last.type === "watering";
+    const days = isWatering ? daysSince(last.date) : null;
+    if (!isWatering || days >= 3) {
+        const msg = !isWatering ? "Not watered recently" : `Not watered in ${days}d`;
+        return `<p class="bed-water-alert">💧 ${msg}</p>`;
+    }
+    return "";
+}
+
 function daysSince(dateStr) {
     const planted = new Date(dateStr);
     const today   = new Date();
@@ -381,6 +393,7 @@ function renderBeds(beds) {
                 </div>`).join("")}
             </div>
             ${lastLine ? `<p class="bed-last-activity">${escapeHtml(lastLine)}</p>` : ""}
+            ${wateringAlert(bed)}
         </div>`;
     }).join("");
     }
@@ -579,7 +592,11 @@ function renderFormulas(formulas) {
         <div class="formula-card">
             <div class="formula-header">
                 <p class="formula-name">${escapeHtml(f.name)}</p>
-                ${f.category ? `<span class="tag">${escapeHtml(f.category)}</span>` : ""}
+                <div class="formula-actions">
+                    ${f.category ? `<span class="tag">${escapeHtml(f.category)}</span>` : ""}
+                    <button class="formula-edit-btn" onclick="openFormulaModal(${i})" aria-label="Edit">✏️</button>
+                    <button class="formula-delete-btn" onclick="deleteFormula(${i})" aria-label="Delete">🗑️</button>
+                </div>
             </div>
             ${f.description ? `<p class="formula-desc">${escapeHtml(f.description)}</p>` : ""}
             ${calcSection}
@@ -730,7 +747,7 @@ function renderLogs(logs) {
     const html = Object.keys(groups)
         .sort((a, b) => b.localeCompare(a))
         .map(dateKey => {
-            const cards = groups[dateKey].map(log => {
+            const cards = [...groups[dateKey]].reverse().map(log => {
                 const icon       = CATEGORY_ICON[log.activityCategory]  || "📝";
                 const label      = CATEGORY_LABEL[log.activityCategory] || escapeHtml(log.activityCategory);
                 const bedNum     = log.bedNumber && log.bedNumber !== "all" ? log.bedNumber : null;
@@ -985,7 +1002,112 @@ document.getElementById("saleModalOverlay").addEventListener("click", function(e
     if (e.target === this) closeSaleModal();
 });
 
-// --- 14. App Initialization ---
+// --- 14. Formula Modal (Add / Edit / Delete) ---
+let editingFormulaIndex = null;
+
+function openFormulaModal(index = null) {
+    editingFormulaIndex = index;
+    const isEdit = index !== null;
+    document.getElementById("formulaModalTitle").textContent = isEdit ? "Edit Formula" : "Add Formula";
+    document.getElementById("formulaSubmitBtn").textContent  = isEdit ? "Save changes" : "Save formula";
+
+    const f = isEdit ? formulasData[index] : null;
+    document.getElementById("formulaName").value        = f ? f.name        : "";
+    document.getElementById("formulaCategory").value   = f ? (f.category   || "") : "";
+    document.getElementById("formulaDescription").value = f ? (f.description || "") : "";
+
+    const rows = document.getElementById("ingredientRows");
+    rows.innerHTML = "";
+    const ingredients = f ? parseRecipe(f.recipe) : null;
+    if (ingredients && ingredients.length) {
+        ingredients.forEach(ing => addIngredientRow(ing.name, ing.amount, ing.unit));
+    } else {
+        addIngredientRow();
+    }
+
+    document.getElementById("formulaModalOverlay").classList.add("open");
+}
+
+function closeFormulaModal() {
+    document.getElementById("formulaModalOverlay").classList.remove("open");
+    editingFormulaIndex = null;
+}
+
+function addIngredientRow(name = "", amount = "", unit = "ml") {
+    const rows = document.getElementById("ingredientRows");
+    const row  = document.createElement("div");
+    row.className = "ingredient-edit-row";
+    row.innerHTML = `
+        <input type="text"   class="ing-name"   placeholder="Ingredient" value="${escapeHtml(String(name))}" required>
+        <input type="number" class="ing-amount"  placeholder="Amt" value="${escapeHtml(String(amount))}" inputmode="decimal" min="0" step="any" required>
+        <select class="ing-unit">
+            <option value="ml"${unit==="ml"?" selected":""}>ml</option>
+            <option value="g"${unit==="g"?" selected":""}>g</option>
+            <option value="L"${unit==="L"?" selected":""}>L</option>
+            <option value="tsp"${unit==="tsp"?" selected":""}>tsp</option>
+        </select>
+        <button type="button" class="ing-remove-btn" onclick="this.parentElement.remove()">✕</button>`;
+    rows.appendChild(row);
+}
+
+function serializeRecipe() {
+    const rows = document.querySelectorAll("#ingredientRows .ingredient-edit-row");
+    const parts = [];
+    for (const row of rows) {
+        const name   = row.querySelector(".ing-name").value.trim();
+        const amount = row.querySelector(".ing-amount").value.trim();
+        const unit   = row.querySelector(".ing-unit").value;
+        if (name && amount) parts.push(`${name}:${amount}:${unit}`);
+    }
+    return parts.join("|");
+}
+
+async function handleFormulaSubmit(e) {
+    e.preventDefault();
+    const name = document.getElementById("formulaName").value.trim();
+    if (!name) { document.getElementById("formulaName").classList.add("invalid"); return; }
+
+    const formula = {
+        name,
+        category:    document.getElementById("formulaCategory").value.trim(),
+        description: document.getElementById("formulaDescription").value.trim(),
+        recipe:      serializeRecipe()
+    };
+
+    const isEdit = editingFormulaIndex !== null;
+
+    if (isEdit) {
+        const updated = [...formulasData];
+        updated[editingFormulaIndex] = { ...updated[editingFormulaIndex], ...formula };
+        localStorage.setItem(FORMULAS_CACHE_KEY, JSON.stringify(updated));
+        renderFormulas(updated);
+        queueAction({ action: "updateFormula", id: formulasData[editingFormulaIndex].id, ...formula });
+        showToast(`Formula updated`);
+    } else {
+        const newEntry = { id: "f_" + Date.now(), ...formula };
+        const updated  = [newEntry, ...formulasData];
+        localStorage.setItem(FORMULAS_CACHE_KEY, JSON.stringify(updated));
+        renderFormulas(updated);
+        queueAction({ action: "addFormula", ...formula });
+        showToast(`Formula added`);
+    }
+
+    closeFormulaModal();
+    processOfflineQueue();
+}
+
+function deleteFormula(index) {
+    const f = formulasData[index];
+    if (!confirm(`Delete "${f.name}"?`)) return;
+    const updated = formulasData.filter((_, i) => i !== index);
+    localStorage.setItem(FORMULAS_CACHE_KEY, JSON.stringify(updated));
+    renderFormulas(updated);
+    queueAction({ action: "deleteFormula", id: f.id });
+    processOfflineQueue();
+    showToast(`Formula deleted`);
+}
+
+// --- 15. App Initialization ---
 window.addEventListener("online", processOfflineQueue);
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -1000,6 +1122,42 @@ document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll(".nav-btn[data-view]").forEach(btn => {
         btn.addEventListener("click", () => switchView(btn.dataset.view));
     });
+
+    // Pull-to-refresh
+    const mainEl = document.querySelector("main");
+    let ptr_startY = 0;
+    let ptr_active = false;
+    const PTR_THRESHOLD = 80;
+
+    mainEl.addEventListener("touchstart", e => {
+        if (mainEl.scrollTop === 0) {
+            ptr_startY = e.touches[0].clientY;
+            ptr_active = true;
+        }
+    }, { passive: true });
+
+    mainEl.addEventListener("touchmove", e => {
+        if (!ptr_active) return;
+        const pull = e.touches[0].clientY - ptr_startY;
+        const indicator = document.getElementById("ptrIndicator");
+        if (pull > 0 && pull < PTR_THRESHOLD + 20) {
+            indicator.style.height = Math.min(pull * 0.6, 44) + "px";
+            indicator.style.opacity = Math.min(pull / PTR_THRESHOLD, 1);
+        }
+    }, { passive: true });
+
+    mainEl.addEventListener("touchend", e => {
+        if (!ptr_active) return;
+        ptr_active = false;
+        const pull = e.changedTouches[0].clientY - ptr_startY;
+        const indicator = document.getElementById("ptrIndicator");
+        indicator.style.height = "0";
+        indicator.style.opacity = "0";
+        if (pull >= PTR_THRESHOLD) {
+            fetchBeds();
+            fetchLogs();
+        }
+    }, { passive: true });
 
     if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("./sw.js")

@@ -1,11 +1,11 @@
 {
-  "name": "FarmLog System",
-  "short_name": "FarmLog",
+  "name": "Kabun Farm Intelligence",
+  "short_name": "Kabun",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#f4f4f4",
   "theme_color": "#1a8f3c",
-  "description": "Offline-first farm management logger",
+  "description": "Offline-first crop intelligence for commercial farms",
   "icons": [
     {
       "src": "icon-192.png",

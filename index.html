@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#1a8f3c">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <title>FarmLog</title>
+  <title>Kabun</title>
   <link rel="stylesheet" href="style.css">
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icon-192.png">
@@ -18,7 +18,25 @@
   </div>
 
   <header class="app-header">
-    <h1>FarmLog</h1>
+    <h1>
+      <svg width="110" height="32" viewBox="0 0 220 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Kabun">
+        <!-- Leaves -->
+        <path d="M28 6 C20 6 13 13 13 22 C13 28 16 33 21 36 C21 36 22 28 28 23 C34 28 35 36 35 36 C40 33 43 28 43 22 C43 13 36 6 28 6Z" stroke="#1a8f3c" stroke-width="2.2" fill="none" stroke-linejoin="round"/>
+        <path d="M20 14 C14 11 8 14 7 21 C6 27 9 32 14 35 C14 35 15 28 20 24" stroke="#1a8f3c" stroke-width="2.2" fill="none" stroke-linejoin="round"/>
+        <!-- Stem -->
+        <line x1="28" y1="36" x2="28" y2="50" stroke="#1a8f3c" stroke-width="2.2" stroke-linecap="round"/>
+        <!-- Circuit roots -->
+        <line x1="28" y1="50" x2="16" y2="58" stroke="#1a8f3c" stroke-width="2.2" stroke-linecap="round"/>
+        <line x1="28" y1="50" x2="28" y2="60" stroke="#1a8f3c" stroke-width="2.2" stroke-linecap="round"/>
+        <line x1="28" y1="50" x2="40" y2="58" stroke="#1a8f3c" stroke-width="2.2" stroke-linecap="round"/>
+        <circle cx="16" cy="59" r="2.2" fill="#1a8f3c"/>
+        <circle cx="28" cy="61" r="2.2" fill="#1a8f3c"/>
+        <circle cx="40" cy="59" r="2.2" fill="#1a8f3c"/>
+        <!-- Wordmark -->
+        <text x="58" y="38" font-family="'Helvetica Neue', Arial, sans-serif" font-size="28" font-weight="700" letter-spacing="3" fill="#1a8f3c">KABUN</text>
+        <text x="60" y="54" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10" font-weight="400" letter-spacing="3.5" fill="#555">FARM INTELLIGENCE</text>
+      </svg>
+    </h1>
     <div class="header-actions">
       <button class="formulas-btn" onclick="switchView('formulas')" aria-label="Formulas">🧪</button>
       <div class="status-badge">
@@ -29,6 +47,7 @@
   </header>
 
   <main>
+    <div id="ptrIndicator" style="height:0;opacity:0;">↓ Refreshing…</div>
     <!-- Home View -->
     <div id="view-home" class="view">
 
@@ -75,7 +94,10 @@
     <!-- Formulas View -->
     <div id="view-formulas" class="view" hidden>
       <section aria-label="Formulas">
-        <p class="section-label">Formulas</p>
+        <div class="section-header">
+          <p class="section-label">Formulas</p>
+          <button class="add-bed-btn" onclick="openFormulaModal()">+ Add</button>
+        </div>
         <div class="formula-volume-global">
           <span class="formula-calc-label">Sprayer volume</span>
           <div class="formula-volume-wrap">
@@ -285,6 +307,36 @@
         </div>
 
         <button type="submit" class="submit-btn">Save sale</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Formula Edit/Add Modal -->
+  <div class="modal-overlay" id="formulaModalOverlay">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <h2 id="formulaModalTitle">Add Formula</h2>
+        <button class="modal-close" onclick="closeFormulaModal()" aria-label="Close">✕</button>
+      </div>
+      <form id="formulaForm" onsubmit="handleFormulaSubmit(event)" novalidate>
+        <div class="form-field">
+          <label for="formulaName">Name</label>
+          <input type="text" id="formulaName" placeholder="e.g. EM4 Foliar Spray" required>
+        </div>
+        <div class="form-field">
+          <label for="formulaCategory">Category</label>
+          <input type="text" id="formulaCategory" placeholder="e.g. Biological, Fungicide">
+        </div>
+        <div class="form-field">
+          <label for="formulaDescription">Description</label>
+          <input type="text" id="formulaDescription" placeholder="Short note about this formula">
+        </div>
+        <div class="form-field">
+          <label>Ingredients <span style="font-size:11px;color:#888;">per litre of water</span></label>
+          <div id="ingredientRows"></div>
+          <button type="button" class="extras-toggle" onclick="addIngredientRow()">＋ Add ingredient</button>
+        </div>
+        <button type="submit" class="submit-btn" id="formulaSubmitBtn">Save formula</button>
       </form>
     </div>
   </div>

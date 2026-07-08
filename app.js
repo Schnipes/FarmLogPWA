@@ -281,6 +281,16 @@ function handleSubmit(event) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(queue));
     localStorage.setItem(LAST_BED_KEY, bedScope);
     updateSyncBadge();
+
+    // Optimistically update lastActivity on the bed card
+    if (bedScope !== "all") {
+        const bed = bedsData.find(b => String(b.bedNumber) === String(bedScope));
+        if (bed) {
+            bed.lastActivity = { type: activity, date };
+            renderBeds(bedsData);
+        }
+    }
+
     closeModal();
 
     // Richer toast: "Harvest logged · Bed 2"
@@ -353,7 +363,7 @@ function wateringAlert(bed) {
 }
 
 function daysSince(dateStr) {
-    const planted = new Date(dateStr);
+    const planted = new Date(dateStr + "T00:00:00");
     const today   = new Date();
     today.setHours(0, 0, 0, 0);
     return Math.floor((today - planted) / 86400000);

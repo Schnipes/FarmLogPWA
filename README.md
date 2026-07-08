@@ -1,6 +1,6 @@
-# FarmLog
+# Kabun Farm Intelligence
 
-An offline-first Progressive Web App for logging daily activity on a small commercial vegetable farm in Malaysia. Built to work in the field with poor connectivity — actions are queued locally and synced to Google Sheets when back online.
+An offline-first Progressive Web App for managing and logging daily activity on a small commercial vegetable farm in Malaysia. Built to work in the field with poor connectivity — actions are queued locally and synced to Google Sheets when back online.
 
 ---
 
@@ -8,6 +8,7 @@ An offline-first Progressive Web App for logging daily activity on a small comme
 
 **Beds & Crops**
 - Track multiple numbered beds with active crops and day counts
+- Watering alerts — bed cards flag beds not watered in 3+ days
 - Tap a bed to see crop details, past crop history, and log actions
 - Add new beds directly from the app
 
@@ -17,6 +18,7 @@ An offline-first Progressive Web App for logging daily activity on a small comme
 - Sowing adds a new crop batch to the bed immediately
 - Optional inputs/notes with formula picker (see Formulas)
 - Optional cost and revenue per activity
+- Pull-to-refresh: swipe down to sync latest data
 
 **Sales**
 - Log crop sales separately from harvest
@@ -25,13 +27,19 @@ An offline-first Progressive Web App for logging daily activity on a small comme
 - No bed required — farmer thinks in crop + quantity, not per bed
 
 **Formulas**
-- Spray and fertigation recipes stored in Google Sheets
+- Spray and fertigation recipes managed directly in the app
+- Add, edit, and delete formulas from your phone — no Sheets access needed
 - Single sprayer volume input (default 16L) recalculates all recipe doses instantly
 - Formula picker in the log form — tap a recipe to auto-fill ingredients and amounts into inputs/notes
 
 **Financial Summary**
 - Revenue, cost, and net shown on the Activity tab
 - Toggle between this week and this month
+
+**Activity Log**
+- All logs and sales merged into a single feed, grouped by date
+- Filter by bed or activity type
+- Most recent entries shown first
 
 **Offline & Sync**
 - All actions saved to a local queue first
@@ -60,7 +68,7 @@ Create a Google Spreadsheet with these sheets and exact camelCase headers:
 | Beds | bedNumber, location, status |
 | Batches | id, bedNumber, cropName, location, plantingDate, status, harvestDate |
 | Logs | id, date, bedNumber, activityCategory, cropName, inputsUsed, costRM, revenueRM |
-| Formulas | name, category, description, recipe |
+| Formulas | id, name, category, description, recipe |
 | Sales | id, date, crop, quantity, unit, pricePerUnit, totalRevenue |
 
 **Formula recipe format:** pipe-separated `name:amount:unit` per ingredient
@@ -68,6 +76,8 @@ Create a Google Spreadsheet with these sheets and exact camelCase headers:
 EM4:10:ml|Antracol:2:g
 ```
 Amounts are per litre — the app multiplies by sprayer volume.
+
+> **Note:** The `id` column in the Formulas sheet is required for add/edit/delete to work. Populate existing rows with unique values (e.g. `f1`, `f2`, ...).
 
 ---
 
@@ -95,7 +105,9 @@ Amounts are per litre — the app multiplies by sprayer volume.
 - `?action=getSales` — all sales sorted newest first
 
 **doPost**
-- `addLog`, `addBed`, `addBatch`, `updateBatch`, `deleteLog`, `addSale`
+- `addLog`, `addBed`, `addBatch`, `updateBatch`, `deleteLog`
+- `addSale`, `deleteSale`
+- `addFormula`, `updateFormula`, `deleteFormula`
 
 ---
 

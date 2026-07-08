@@ -93,6 +93,20 @@ function localDateStr(d) {
         String(d.getDate()).padStart(2, "0");
 }
 
+// Normalize a date coming from anywhere — a plain "YYYY-MM-DD" string, or a
+// Date-typed Sheets cell that serializes as full ISO like
+// "2026-07-08T16:00:00.000Z" — into a consistent local "YYYY-MM-DD". Without
+// this, appending "T00:00:00" to an already-ISO string produces an invalid
+// Date (NaN day counts, broken watering alerts) whenever a Sheets column's
+// cell format is Date instead of plain text.
+function ymd(dateStr) {
+    if (!dateStr) return "";
+    const s = String(dateStr);
+    if (s.length <= 10) return s;              // already "YYYY-MM-DD"
+    const d = new Date(s);                     // full ISO from a Date-typed cell
+    return isNaN(d) ? s.slice(0, 10) : localDateStr(d);
+}
+
 function todayString() {
     return localDateStr(new Date());
 }
@@ -471,7 +485,7 @@ function wateringAlert(bed) {
 }
 
 function daysSince(dateStr) {
-    const planted = new Date(dateStr + "T00:00:00");
+    const planted = new Date(ymd(dateStr) + "T00:00:00");
     const today   = new Date();
     today.setHours(0, 0, 0, 0);
     return Math.floor((today - planted) / 86400000);
@@ -566,7 +580,7 @@ function openBedDetail(bedNum) {
         html += `<p class="bed-history-label">Past crops</p>`;
         html += bed.cropHistory.map(c => {
             const days = c.plantingDate && c.harvestDate
-                ? Math.round((new Date(c.harvestDate + "T00:00:00") - new Date(c.plantingDate + "T00:00:00")) / 86400000)
+                ? Math.round((new Date(ymd(c.harvestDate) + "T00:00:00") - new Date(ymd(c.plantingDate) + "T00:00:00")) / 86400000)
                 : null;
             const harvestStr = c.harvestDate ? shortDate(c.harvestDate) : "—";
             return `
@@ -801,7 +815,7 @@ async function fetchFormulas() {
 
 // --- 11. Log Data (Activity Tab) ---
 function shortDate(dateStr) {
-    const d = new Date(dateStr + "T00:00:00");
+    const d = new Date(ymd(dateStr) + "T00:00:00");
     return d.toLocaleDateString("en-MY", { month: "short", day: "numeric" });
 }
 
@@ -914,7 +928,7 @@ function renderLogs(logs) {
 
     const groups = {};
     filtered.forEach(log => {
-        const key = log.date ? log.date.toString().slice(0, 10) : "Unknown";
+        const key = log.date ? ymd(log.date) : "Unknown";
         if (!groups[key]) groups[key] = [];
         groups[key].push(log);
     });
@@ -1070,11 +1084,11 @@ function renderFinancialSummary() {
     const startStr = localDateStr(start);
 
     const revenue = sales
-        .filter(s => s.date && s.date.toString().slice(0, 10) >= startStr)
+        .filter(s => s.date && ymd(s.date) >= startStr)
         .reduce((sum, s) => sum + (parseFloat(s.totalRevenue) || 0), 0);
 
     const cost = logs
-        .filter(l => l.date && l.date.toString().slice(0, 10) >= startStr && l.costRM)
+        .filter(l => l.date && ymd(l.date) >= startStr && l.costRM)
         .reduce((sum, l) => sum + (parseFloat(l.costRM) || 0), 0);
 
     const net = revenue - cost;

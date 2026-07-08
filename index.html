@@ -146,6 +146,10 @@
         <div id="logList">
           <p style="color:#888;font-size:14px;padding:8px 4px;">Loading logs...</p>
         </div>
+
+        <!-- Profit by Crop (all-time) -->
+        <p class="section-label" style="margin-top:20px;">Profit by crop <span style="font-weight:400;color:#888;">· all-time</span></p>
+        <div id="cropPLList"></div>
       </section>
     </div>
   </main>
@@ -213,7 +217,8 @@
 
         <div class="form-field" id="newCropField" hidden>
           <label for="newCropName">Crop being sown</label>
-          <input type="text" id="newCropName" placeholder="e.g. Red Amaranth">
+          <input type="text" id="newCropName" placeholder="e.g. Red Amaranth" list="cropNameList" autocomplete="off">
+          <datalist id="cropNameList"></datalist>
         </div>
 
         <!-- Collapsible extras -->

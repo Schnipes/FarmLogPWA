@@ -1091,6 +1091,48 @@ textarea {
 .fin-value.green { color: var(--color-primary); }
 .fin-value.red   { color: var(--color-danger); }
 
+/* ---------- Profit by Crop ---------- */
+.crop-pl-row {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 8px;
+}
+
+.crop-pl-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+
+.crop-pl-name {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.crop-pl-net {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.crop-pl-net.green { color: var(--color-primary); }
+.crop-pl-net.red   { color: var(--color-danger); }
+
+.crop-pl-stats {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: #888;
+}
+
+.crop-pl-coverage {
+  font-size: 11px;
+  color: #aaa;
+  margin-top: 4px;
+}
+
 /* ---------- Sale log card ---------- */
 .log-card-sale {
   border-left: 3px solid var(--color-accent-sale);

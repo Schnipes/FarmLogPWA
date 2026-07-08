@@ -46,6 +46,39 @@ function escapeHtml(str) {
         .replace(/'/g, "&#39;");
 }
 
+// Union of every crop name the app has seen (active crops, crop history, sales).
+// Used to power name suggestions and to snap typed names onto an existing one.
+function getKnownCropNames() {
+    const names = new Set();
+    bedsData.forEach(b => {
+        b.crops.forEach(c => c.cropName && names.add(c.cropName));
+        (b.cropHistory || []).forEach(c => c.cropName && names.add(c.cropName));
+    });
+    const sales = JSON.parse(localStorage.getItem(SALES_CACHE_KEY) || "[]");
+    sales.forEach(s => s.crop && names.add(s.crop));
+    return [...names].sort();
+}
+
+// Trim + case-insensitively snap onto an existing crop name so "kangkong" and
+// "Kangkong" end up as the same crop instead of silently forking in half.
+function normalizeCropName(typed) {
+    const trimmed = String(typed || "").trim();
+    if (!trimmed) return trimmed;
+    const match = getKnownCropNames().find(n => n.toLowerCase() === trimmed.toLowerCase());
+    return match || trimmed;
+}
+
+// Refresh the crop-name suggestion lists (sowing form + sale form) from
+// whatever crop names are currently known.
+function refreshCropDatalists() {
+    const names = getKnownCropNames();
+    const optionsHtml = names.map(n => `<option value="${escapeHtml(n)}">`).join("");
+    const cropList = document.getElementById("cropNameList");
+    if (cropList) cropList.innerHTML = optionsHtml;
+    const saleList = document.getElementById("activeCropsList");
+    if (saleList) saleList.innerHTML = optionsHtml;
+}
+
 function showToast(msg) {
     const toast = document.getElementById("toast");
     toast.textContent = msg;
@@ -245,7 +278,7 @@ function handleSubmit(event) {
     }
 
     const bedScope = document.getElementById("bedScope").value;
-    const cropName = document.getElementById("newCropName").value.trim();
+    const cropName = normalizeCropName(document.getElementById("newCropName").value.trim());
 
     // Sowing must name a crop — otherwise we'd log a useless entry with no batch.
     if (activity === "sowing" && !cropName) {
@@ -254,13 +287,20 @@ function handleSubmit(event) {
         return;
     }
 
+    // Harvest logs should only record the crop(s) actually checked off, not
+    // every crop still growing in the bed — needed for accurate per-crop P&L.
+    const harvestedCropNames = activity === "harvest"
+        ? [...document.querySelectorAll('input[name="harvestCrop"]:checked')].map(cb => cb.dataset.crop)
+        : [];
+
     const entry = {
         action:           "addLog",
         id:               "log_" + Date.now(),
         date,
         bedNumber:        bedScope,
         activityCategory: activity,
-        cropName:         activity === "sowing" ? cropName : (() => {
+        cropName:         activity === "sowing"  ? cropName :
+                           activity === "harvest" ? harvestedCropNames.join(", ") : (() => {
             if (bedScope === "all") return "";
             const bed = bedsData.find(b => String(b.bedNumber) === String(bedScope));
             return bed && bed.crops.length ? bed.crops.map(c => c.cropName).join(", ") : "";
@@ -404,7 +444,7 @@ function switchView(viewName) {
     if (activeBtn) activeBtn.classList.add("active");
     const formulasBtn = document.querySelector(".formulas-btn");
     if (formulasBtn) formulasBtn.classList.toggle("active", viewName === "formulas");
-    if (viewName === "data") { renderBedFilterChips(); renderTypeFilterChips(); renderFinancialSummary(); fetchLogs(); }
+    if (viewName === "data") { renderBedFilterChips(); renderTypeFilterChips(); renderFinancialSummary(); renderCropPL(); fetchLogs(); }
     if (viewName === "formulas") fetchFormulas();
 }
 
@@ -650,6 +690,7 @@ async function fetchBeds() {
             renderBeds(bedsData);
             populateBedDropdown();
             renderBedFilterChips();
+            refreshCropDatalists();
         } catch (e) { /* ignore corrupt cache */ }
     }
     try {
@@ -665,6 +706,7 @@ async function fetchBeds() {
             renderBeds(bedsData);
             populateBedDropdown();
             renderBedFilterChips();
+            refreshCropDatalists();
         }
     } catch (e) {
         console.error("Could not load beds:", e);
@@ -852,6 +894,7 @@ function deleteLogEntry(logId) {
 
     renderCombinedActivity();
     renderFinancialSummary();
+    renderCropPL();
     updateSyncBadge();
     showToast("Entry deleted");
     processOfflineQueue();
@@ -929,7 +972,7 @@ async function fetchLogs() {
     const container  = document.getElementById("logList");
     const cachedLogs = localStorage.getItem(LOGS_CACHE_KEY);
     if (cachedLogs) {
-        try { renderCombinedActivity(); } catch (e) { /* ignore */ }
+        try { renderCombinedActivity(); renderCropPL(); } catch (e) { /* ignore */ }
     } else {
         container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">Loading logs...</p>';
     }
@@ -946,6 +989,8 @@ async function fetchLogs() {
         localStorage.setItem(SALES_CACHE_KEY, JSON.stringify(sales));
         renderCombinedActivity();
         renderFinancialSummary();
+        renderCropPL();
+        refreshCropDatalists();
     } catch (e) {
         if (!cachedLogs) {
             container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">Could not load activity.</p>';
@@ -1042,6 +1087,83 @@ function renderFinancialSummary() {
     netEl.className = "fin-value " + (net >= 0 ? "green" : "red");
 }
 
+// --- 13b. Profit by Crop (all-time) ---
+function computeCropPL() {
+    const logs  = JSON.parse(localStorage.getItem(LOGS_CACHE_KEY)  || "[]");
+    const sales = JSON.parse(localStorage.getItem(SALES_CACHE_KEY) || "[]");
+    const stats = {};
+
+    function ensure(name) {
+        if (!stats[name]) stats[name] = { revenue: 0, cost: 0, logCount: 0, costLoggedCount: 0, saleCount: 0 };
+        return stats[name];
+    }
+
+    logs.forEach(l => {
+        if (!l.cropName) return;
+        // A log's cropName can be a comma-joined list (intercropped bed) —
+        // split its cost evenly across the named crops rather than double-
+        // counting it for each one.
+        const names = String(l.cropName).split(",").map(s => s.trim()).filter(Boolean);
+        if (!names.length) return;
+        const cost  = parseFloat(l.costRM) || 0;
+        const share = cost / names.length;
+        names.forEach(name => {
+            const s = ensure(name);
+            s.cost += share;
+            s.logCount++;
+            if (l.costRM) s.costLoggedCount++;
+        });
+    });
+
+    sales.forEach(s => {
+        if (!s.crop) return;
+        const st = ensure(s.crop.trim());
+        st.revenue += parseFloat(s.totalRevenue) || 0;
+        st.saleCount++;
+    });
+
+    return Object.entries(stats)
+        .map(([cropName, s]) => ({
+            cropName,
+            revenue:  s.revenue,
+            cost:     s.cost,
+            net:      s.revenue - s.cost,
+            logCount: s.logCount,
+            costLoggedCount: s.costLoggedCount
+        }))
+        .sort((a, b) => b.net - a.net);
+}
+
+function renderCropPL() {
+    const container = document.getElementById("cropPLList");
+    if (!container) return;
+
+    const data = computeCropPL();
+    if (!data.length) {
+        container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">No crop data yet — log a sale or harvest to see profit by crop.</p>';
+        return;
+    }
+
+    container.innerHTML = data.map(c => {
+        const netClass = c.net >= 0 ? "green" : "red";
+        const coverage = c.logCount > 0 && c.costLoggedCount < c.logCount
+            ? `<p class="crop-pl-coverage">Cost logged in ${c.costLoggedCount}/${c.logCount} activities — actual cost may be higher</p>`
+            : "";
+        return `
+        <div class="crop-pl-row">
+            <div class="crop-pl-header">
+                <span class="crop-pl-name">${escapeHtml(c.cropName)}</span>
+                <span class="crop-pl-net ${netClass}">${c.net >= 0 ? "+" : ""}RM ${c.net.toFixed(2)}</span>
+            </div>
+            <div class="crop-pl-stats">
+                <span>Revenue: RM ${c.revenue.toFixed(2)}</span>
+                <span>Cost: RM ${c.cost.toFixed(2)}</span>
+            </div>
+            ${coverage}
+        </div>`;
+    }).join("");
+}
+
 // --- 13. Sales Modal ---
 function openSaleModal() {
     document.getElementById("saleDate").value = todayString();
@@ -1054,10 +1176,8 @@ function openSaleModal() {
     document.getElementById("saleQty").classList.remove("invalid");
     document.getElementById("salePricePerUnit").classList.remove("invalid");
 
-    // Populate crop datalist from active beds
-    const datalist = document.getElementById("activeCropsList");
-    const crops = [...new Set(bedsData.flatMap(b => b.crops.map(c => c.cropName)))];
-    datalist.innerHTML = crops.map(c => `<option value="${escapeHtml(c)}">`).join("");
+    // Crop suggestions (all crops ever seen, not just currently active)
+    refreshCropDatalists();
 
     document.getElementById("saleModalOverlay").classList.add("open");
     document.body.style.overflow = "hidden";
@@ -1079,7 +1199,7 @@ function handleSaleSubmit(event) {
     event.preventDefault();
 
     const date         = document.getElementById("saleDate").value;
-    const crop         = document.getElementById("saleCrop").value.trim();
+    const crop         = normalizeCropName(document.getElementById("saleCrop").value.trim());
     const qty          = document.getElementById("saleQty").value;
     const unit         = document.getElementById("saleUnit").value;
     const pricePerUnit = document.getElementById("salePricePerUnit").value;
@@ -1127,6 +1247,7 @@ function handleSaleSubmit(event) {
     if (!document.getElementById("view-data").hidden) {
         renderCombinedActivity();
         renderFinancialSummary();
+        renderCropPL();
     }
 }
 

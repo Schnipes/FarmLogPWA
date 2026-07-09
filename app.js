@@ -6,6 +6,7 @@ const LOGS_CACHE_KEY     = "farmlog_logs_cache";
 const SALES_CACHE_KEY    = "farmlog_sales_cache";
 const LAST_BED_KEY       = "farmlog_last_bed";
 const BED_MAX_KEY        = "farmlog_bed_max";
+const AUTH_TOKEN_KEY     = "farmlog_auth_token";
 const GOOGLE_SCRIPT_URL  = "https://script.google.com/macros/s/AKfycbyQSzKWjoj3rD4_d045XN4csdYW5VXIHxV9qHviMBUc7iJvacGRHHuBLQPUTecMCBmswQ/exec";
 
 const MODAL_TITLES = {
@@ -105,6 +106,24 @@ function ymd(dateStr) {
     if (s.length <= 10) return s;              // already "YYYY-MM-DD"
     const d = new Date(s);                     // full ISO from a Date-typed cell
     return isNaN(d) ? s.slice(0, 10) : localDateStr(d);
+}
+
+// Shared-secret token gate. Asked once (native prompt), then cached in
+// localStorage — no login screen, matches this app's single-user, no-auth-
+// screen design. Not real auth (the token is client-side), just a deterrent
+// against casual/accidental discovery of the backend URL.
+function getAuthToken() {
+    let token = localStorage.getItem(AUTH_TOKEN_KEY);
+    if (!token) {
+        token = window.prompt("Enter farm PIN:") || "";
+        if (token) localStorage.setItem(AUTH_TOKEN_KEY, token);
+    }
+    return token;
+}
+
+// Appends the auth token to a GET request URL (which already has ?action=...).
+function withToken(url) {
+    return url + "&token=" + encodeURIComponent(getAuthToken());
 }
 
 function todayString() {
@@ -383,6 +402,7 @@ function handleSubmit(event) {
         const bed = bedsData.find(b => String(b.bedNumber) === String(bedScope));
         if (bed) {
             bed.lastActivity = { type: activity, date };
+            if (activity === "watering") bed.lastWatered = date;
             saveBeds();
             renderBeds(bedsData);
         }
@@ -418,7 +438,7 @@ async function processOfflineQueue() {
                 const res = await fetch(GOOGLE_SCRIPT_URL, {
                     method:  "POST",
                     headers: { "Content-Type": "text/plain;charset=utf-8" },
-                    body:    JSON.stringify(item)
+                    body:    JSON.stringify({ ...item, token: getAuthToken() })
                 });
                 if (!res.ok) throw new Error("HTTP " + res.status);
                 result = await res.json();
@@ -426,6 +446,16 @@ async function processOfflineQueue() {
                 // Couldn't reach the server or read its reply — keep the item and
                 // retry later. This is the normal offline / flaky-signal path.
                 console.error("Sync failed, will retry later.", err);
+                break;
+            }
+
+            if (result && result.unauthorized) {
+                // Wrong/missing PIN — every remaining item would fail identically,
+                // and dropping them would silently discard real unsynced work. Keep
+                // the whole queue and stop, same as a network failure, so it retries
+                // once the PIN is fixed rather than being lost.
+                console.error("Sync blocked: unauthorized. Check the farm PIN.");
+                showToast("⚠️ Sync blocked — check your farm PIN");
                 break;
             }
 
@@ -474,11 +504,13 @@ function lastActivityLabel(lastActivity) {
 
 function wateringAlert(bed) {
     if (!bed.crops.length) return "";
-    const last = bed.lastActivity;
-    const isWatering = last && last.type === "watering";
-    const days = isWatering ? daysSince(last.date) : null;
-    if (!isWatering || days >= 3) {
-        const msg = !isWatering ? "Not watered recently" : `Not watered in ${days}d`;
+    // Tracks watering specifically (server-computed lastWatered), not just
+    // "days since the most recent activity of any kind" — otherwise logging
+    // e.g. pest control the day after watering would wrongly reset this.
+    const hasWatered = !!bed.lastWatered;
+    const days = hasWatered ? daysSince(bed.lastWatered) : null;
+    if (!hasWatered || days >= 3) {
+        const msg = !hasWatered ? "Not watered recently" : `Not watered in ${days}d`;
         return `<p class="bed-water-alert">💧 ${msg}</p>`;
     }
     return "";
@@ -708,7 +740,7 @@ async function fetchBeds() {
         } catch (e) { /* ignore corrupt cache */ }
     }
     try {
-        const res  = await fetch(GOOGLE_SCRIPT_URL + "?action=getBeds");
+        const res  = await fetch(withToken(GOOGLE_SCRIPT_URL + "?action=getBeds"));
         const data = await res.json();
         if (data.beds) {
             bedsData = data.beds;
@@ -801,7 +833,7 @@ async function fetchFormulas() {
         container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">Loading formulas...</p>';
     }
     try {
-        const res      = await fetch(GOOGLE_SCRIPT_URL + "?action=getFormulas");
+        const res      = await fetch(withToken(GOOGLE_SCRIPT_URL + "?action=getFormulas"));
         const data     = await res.json();
         const formulas = data.formulas || [];
         localStorage.setItem(FORMULAS_CACHE_KEY, JSON.stringify(formulas));
@@ -992,8 +1024,8 @@ async function fetchLogs() {
     }
     try {
         const [logsRes, salesRes] = await Promise.all([
-            fetch(GOOGLE_SCRIPT_URL + "?action=getLogs"),
-            fetch(GOOGLE_SCRIPT_URL + "?action=getSales")
+            fetch(withToken(GOOGLE_SCRIPT_URL + "?action=getLogs")),
+            fetch(withToken(GOOGLE_SCRIPT_URL + "?action=getSales"))
         ]);
         const logsData  = await logsRes.json();
         const salesData = await salesRes.json();

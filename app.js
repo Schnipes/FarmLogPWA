@@ -355,6 +355,7 @@ function getOfflineLogs() {
 function updateSyncBadge() {
     const queueLength = getOfflineLogs().length;
     const badge = document.querySelector(".status-badge");
+    badge.classList.toggle("status-badge-pending", queueLength > 0);
     if (queueLength > 0) {
         badge.innerHTML = `<span class="status-dot" style="background:#b3261e" aria-hidden="true"></span><span>${queueLength} Offline (Pending)</span>`;
         badge.style.borderColor = "#b3261e";
@@ -363,6 +364,26 @@ function updateSyncBadge() {
         badge.innerHTML = `<span class="status-dot" style="background:var(--color-primary)" aria-hidden="true"></span><span>Online & Synced</span>`;
         badge.style.borderColor = "var(--color-border)";
         badge.style.color = "var(--color-text)";
+    }
+}
+
+// Escape hatch for a queue item that's stuck (e.g. a stale action a server
+// rejected silently, or a PIN that no longer matches) — tap the sync badge
+// to retry once, or clear it entirely if retrying doesn't help.
+function handleSyncBadgeClick() {
+    const queueLength = getOfflineLogs().length;
+    if (queueLength === 0) {
+        showToast("Already synced");
+        return;
+    }
+    if (confirm(`${queueLength} pending action(s) haven't synced yet.\n\nRetry sync now? (Cancel for other options)`)) {
+        processOfflineQueue();
+        return;
+    }
+    if (confirm(`Clear all ${queueLength} pending action(s) without syncing? This cannot be undone — any unsynced changes will be lost.`)) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
+        updateSyncBadge();
+        showToast("Pending queue cleared");
     }
 }
 
@@ -571,7 +592,12 @@ function switchView(viewName) {
     if (activeBtn) activeBtn.classList.add("active");
     const formulasBtn = document.querySelector(".formulas-btn");
     if (formulasBtn) formulasBtn.classList.toggle("active", viewName === "formulas");
-    if (viewName === "data") { renderBedFilterChips(); renderTypeFilterChips(); renderFinancialSummary(); renderCropPL(); fetchLogs(); }
+    if (viewName === "data") {
+        renderBedFilterChips(); renderTypeFilterChips(); renderFinancialSummary(); renderCropPL();
+        // Drain pending offline actions first so the server GET doesn't overwrite
+        // the cache with state that's missing our unsynced changes (same fix as startup).
+        processOfflineQueue().finally(fetchLogs);
+    }
     if (viewName === "formulas") fetchFormulas();
     if (viewName === "plan") fetchTasks();
 }
@@ -1091,6 +1117,60 @@ function renderCombinedActivity() {
     renderLogs([...logs, ...saleEntries]);
 }
 
+function csvEscape(val) {
+    const s = String(val ?? "");
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function exportActivityCsv() {
+    const logs  = JSON.parse(localStorage.getItem(LOGS_CACHE_KEY)  || "[]");
+    const sales = JSON.parse(localStorage.getItem(SALES_CACHE_KEY) || "[]");
+
+    if (!logs.length && !sales.length) {
+        showToast("No activity to export yet");
+        return;
+    }
+
+    const rows = [["Type", "Date", "Bed", "Category/Crop", "Details", "Weight (kg)", "Cost (RM)", "Revenue (RM)"]];
+
+    logs.forEach(l => {
+        rows.push([
+            "Log",
+            ymd(l.date),
+            l.bedNumber && l.bedNumber !== "all" ? l.bedNumber : "Whole Farm",
+            CATEGORY_LABEL[l.activityCategory] || l.activityCategory,
+            [l.cropName, l.inputsUsed].filter(Boolean).join(" · "),
+            l.activityCategory === "harvest" ? (l.weight || "") : "",
+            l.costRM || "",
+            l.revenueRM || ""
+        ]);
+    });
+
+    sales.forEach(s => {
+        rows.push([
+            "Sale",
+            ymd(s.date),
+            "",
+            s.crop,
+            `${s.quantity} ${s.unit} @ RM ${parseFloat(s.pricePerUnit).toFixed(2)}`,
+            "",
+            "",
+            s.totalRevenue
+        ]);
+    });
+
+    const csv = rows.map(r => r.map(csvEscape).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url;
+    a.download = `kabun-activity-${todayString()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
 function deleteLogEntry(logId) {
     if (!confirm("Delete this log entry?")) return;
 
@@ -1161,14 +1241,15 @@ function renderLogs(logs) {
                         <span class="sale-log-total">RM ${parseFloat(log.totalRevenue).toFixed(2)}</span>
                     </div>`;
                 } else {
-                    const cropLine  = log.cropName   ? `<p class="log-inputs">🌱 ${escapeHtml(log.cropName)}</p>`  : "";
-                    const inputLine = log.inputsUsed ? `<p class="log-inputs">${escapeHtml(log.inputsUsed)}</p>`   : "";
+                    const cropLine   = log.cropName   ? `<p class="log-inputs">🌱 ${escapeHtml(log.cropName)}</p>`  : "";
+                    const weightLine = (log.activityCategory === "harvest" && log.weight) ? `<p class="log-inputs">⚖️ ${escapeHtml(String(log.weight))} kg</p>` : "";
+                    const inputLine  = log.inputsUsed ? `<p class="log-inputs">${escapeHtml(log.inputsUsed)}</p>`   : "";
                     const financials = (log.costRM || log.revenueRM) ? `
                     <div class="log-financials">
                         ${log.costRM    ? `<span>Cost: RM ${parseFloat(log.costRM).toFixed(2)}</span>`    : ""}
                         ${log.revenueRM ? `<span>Revenue: RM ${parseFloat(log.revenueRM).toFixed(2)}</span>` : ""}
                     </div>` : "";
-                    body = cropLine + inputLine + financials;
+                    body = cropLine + weightLine + inputLine + financials;
                 }
 
                 return `
@@ -1316,22 +1397,25 @@ function computeCropPL() {
     const stats = {};
 
     function ensure(name) {
-        if (!stats[name]) stats[name] = { revenue: 0, cost: 0, logCount: 0, costLoggedCount: 0, saleCount: 0 };
+        if (!stats[name]) stats[name] = { revenue: 0, cost: 0, logCount: 0, costLoggedCount: 0, saleCount: 0, weightKg: 0 };
         return stats[name];
     }
 
     logs.forEach(l => {
         if (!l.cropName) return;
         // A log's cropName can be a comma-joined list (intercropped bed) —
-        // split its cost evenly across the named crops rather than double-
-        // counting it for each one.
+        // split its cost (and harvest weight) evenly across the named crops
+        // rather than double-counting it for each one.
         const names = String(l.cropName).split(",").map(s => s.trim()).filter(Boolean);
         if (!names.length) return;
-        const cost  = parseFloat(l.costRM) || 0;
-        const share = cost / names.length;
+        const cost   = parseFloat(l.costRM) || 0;
+        const share  = cost / names.length;
+        const weight = l.activityCategory === "harvest" ? (parseFloat(l.weight) || 0) : 0;
+        const weightShare = weight / names.length;
         names.forEach(name => {
             const s = ensure(name);
             s.cost += share;
+            s.weightKg += weightShare;
             s.logCount++;
             if (l.costRM) s.costLoggedCount++;
         });
@@ -1351,7 +1435,9 @@ function computeCropPL() {
             cost:     s.cost,
             net:      s.revenue - s.cost,
             logCount: s.logCount,
-            costLoggedCount: s.costLoggedCount
+            costLoggedCount: s.costLoggedCount,
+            weightKg: s.weightKg,
+            costPerKg: s.weightKg > 0 ? s.cost / s.weightKg : null
         }))
         .sort((a, b) => b.net - a.net);
 }
@@ -1371,6 +1457,9 @@ function renderCropPL() {
         const coverage = c.logCount > 0 && c.costLoggedCount < c.logCount
             ? `<p class="crop-pl-coverage">Cost logged in ${c.costLoggedCount}/${c.logCount} activities — actual cost may be higher</p>`
             : "";
+        const costPerKgLine = c.costPerKg !== null
+            ? `<span>Cost/kg: RM ${c.costPerKg.toFixed(2)} <span style="color:#aaa;">(${c.weightKg.toFixed(1)} kg harvested)</span></span>`
+            : "";
         return `
         <div class="crop-pl-row">
             <div class="crop-pl-header">
@@ -1380,6 +1469,7 @@ function renderCropPL() {
             <div class="crop-pl-stats">
                 <span>Revenue: RM ${c.revenue.toFixed(2)}</span>
                 <span>Cost: RM ${c.cost.toFixed(2)}</span>
+                ${costPerKgLine}
             </div>
             ${coverage}
         </div>`;
@@ -1905,9 +1995,13 @@ document.addEventListener("DOMContentLoaded", () => {
         indicator.style.height = "0";
         indicator.style.opacity = "0";
         if (pull >= PTR_THRESHOLD) {
-            fetchBeds();
-            fetchLogs();
-            fetchWeather();
+            // Drain pending offline actions first so the server GET doesn't overwrite
+            // the cache with state that's missing our unsynced changes.
+            processOfflineQueue().finally(() => {
+                fetchBeds();
+                fetchLogs();
+            });
+            fetchWeather(); // third-party API, independent of the offline queue/auth gate
         }
     }, { passive: true });
 

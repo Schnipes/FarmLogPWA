@@ -39,7 +39,7 @@
     </h1>
     <div class="header-actions">
       <button class="formulas-btn" onclick="switchView('formulas')" aria-label="Formulas">🧪</button>
-      <div class="status-badge">
+      <div class="status-badge" onclick="handleSyncBadgeClick()">
         <span class="status-dot" aria-hidden="true"></span>
         <span>Online</span>
       </div>
@@ -128,7 +128,10 @@
     <!-- Activity View -->
     <div id="view-data" class="view" hidden>
       <section aria-label="Activity log">
-        <p class="section-label">Activity</p>
+        <div class="section-header">
+          <p class="section-label">Activity</p>
+          <button class="add-bed-btn" onclick="exportActivityCsv()">⬇ Export CSV</button>
+        </div>
 
         <!-- Financial Summary -->
         <div class="fin-card">

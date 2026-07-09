@@ -7,7 +7,21 @@ const SALES_CACHE_KEY    = "farmlog_sales_cache";
 const LAST_BED_KEY       = "farmlog_last_bed";
 const BED_MAX_KEY        = "farmlog_bed_max";
 const AUTH_TOKEN_KEY     = "farmlog_auth_token";
+const CATEGORY_COLOR_KEY = "farmlog_category_colors";
 const GOOGLE_SCRIPT_URL  = "https://script.google.com/macros/s/AKfycbyQSzKWjoj3rD4_d045XN4csdYW5VXIHxV9qHviMBUc7iJvacGRHHuBLQPUTecMCBmswQ/exec";
+
+// Preset palette for formula-category tags. Kept small and fixed (not a full
+// color picker) so choices stay visually consistent across the app.
+const CATEGORY_COLOR_PALETTE = [
+    "#0072b3", // blue
+    "#b3261e", // red
+    "#a3690b", // amber
+    "#7b4fb5", // purple
+    "#0f8a8a", // teal
+    "#c2185b", // pink
+    "#4b3f9e", // indigo
+    "#55606e"  // slate
+];
 
 const MODAL_TITLES = {
     water:   "Irrigation / Fertigation",
@@ -78,6 +92,39 @@ function refreshCropDatalists() {
     if (cropList) cropList.innerHTML = optionsHtml;
     const saleList = document.getElementById("activeCropsList");
     if (saleList) saleList.innerHTML = optionsHtml;
+}
+
+// --- Formula category colors ---
+// Color is assigned per category NAME (trim + case-insensitive), not per
+// formula, so every formula sharing a category shows the same tag color
+// automatically. Stored client-side — per-device, not synced via Sheets.
+function normalizeCategoryKey(name) {
+    return String(name || "").trim().toLowerCase();
+}
+
+function getCategoryColorMap() {
+    try { return JSON.parse(localStorage.getItem(CATEGORY_COLOR_KEY) || "{}"); }
+    catch (e) { return {}; }
+}
+
+function getCategoryColor(categoryName) {
+    const key = normalizeCategoryKey(categoryName);
+    if (!key) return null;
+    return getCategoryColorMap()[key] || null;
+}
+
+function setCategoryColor(categoryName, hex) {
+    const key = normalizeCategoryKey(categoryName);
+    if (!key) return;
+    const map = getCategoryColorMap();
+    if (hex) map[key] = hex; else delete map[key];
+    localStorage.setItem(CATEGORY_COLOR_KEY, JSON.stringify(map));
+}
+
+// Builds a tinted pill style from a base color: light background, solid text,
+// medium border — same visual language as the app's existing plain .tag.
+function tintStyle(hex) {
+    return `background:${hex}22;color:${hex};border-color:${hex}66`;
 }
 
 function showToast(msg) {
@@ -813,7 +860,11 @@ function renderFormulas(formulas) {
             <div class="formula-header">
                 <p class="formula-name">${escapeHtml(f.name)}</p>
                 <div class="formula-actions">
-                    ${f.category ? `<span class="tag">${escapeHtml(f.category)}</span>` : ""}
+                    ${f.category ? (() => {
+                        const color = getCategoryColor(f.category);
+                        const style = color ? ` style="${tintStyle(color)}"` : "";
+                        return `<span class="tag"${style}>${escapeHtml(f.category)}</span>`;
+                    })() : ""}
                     <button class="formula-edit-btn" onclick="openFormulaModal(${i})" aria-label="Edit">✏️</button>
                     <button class="formula-delete-btn" onclick="deleteFormula(${i})" aria-label="Delete">🗑️</button>
                 </div>
@@ -1303,6 +1354,25 @@ document.getElementById("saleModalOverlay").addEventListener("click", function(e
 
 // --- 14. Formula Modal (Add / Edit / Delete) ---
 let editingFormulaIndex = null;
+let selectedCategoryColor = null;
+
+function renderCategorySwatchPicker(currentCategory) {
+    selectedCategoryColor = getCategoryColor(currentCategory);
+    const container = document.getElementById("categorySwatchPicker");
+    const noneHtml = `<button type="button" class="category-swatch none-swatch${!selectedCategoryColor ? " selected" : ""}" data-hex="" onclick="selectCategorySwatch(null)" aria-label="No color">✕</button>`;
+    const swatchesHtml = CATEGORY_COLOR_PALETTE.map(hex => `
+        <button type="button" class="category-swatch${selectedCategoryColor === hex ? " selected" : ""}"
+            style="background:${hex}" data-hex="${hex}" onclick="selectCategorySwatch('${hex}')" aria-label="Choose color ${hex}"></button>
+    `).join("");
+    container.innerHTML = noneHtml + swatchesHtml;
+}
+
+function selectCategorySwatch(hex) {
+    selectedCategoryColor = hex;
+    document.querySelectorAll("#categorySwatchPicker .category-swatch").forEach(btn => {
+        btn.classList.toggle("selected", (btn.dataset.hex || null) === (hex || null));
+    });
+}
 
 function openFormulaModal(index = null) {
     editingFormulaIndex = index;
@@ -1314,6 +1384,8 @@ function openFormulaModal(index = null) {
     document.getElementById("formulaName").value        = f ? f.name        : "";
     document.getElementById("formulaCategory").value   = f ? (f.category   || "") : "";
     document.getElementById("formulaDescription").value = f ? (f.description || "") : "";
+
+    renderCategorySwatchPicker(f ? f.category : "");
 
     const rows = document.getElementById("ingredientRows");
     rows.innerHTML = "";
@@ -1372,6 +1444,8 @@ async function handleFormulaSubmit(e) {
         description: document.getElementById("formulaDescription").value.trim(),
         recipe:      serializeRecipe()
     };
+
+    if (formula.category) setCategoryColor(formula.category, selectedCategoryColor);
 
     const isEdit = editingFormulaIndex !== null;
 

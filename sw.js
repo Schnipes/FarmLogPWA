@@ -1,4 +1,4 @@
-const CACHE_NAME = 'farmlog-cache-8a307fd';
+const CACHE_NAME = 'farmlog-cache-e9a118a';
 
 const urlsToCache = [
   './',

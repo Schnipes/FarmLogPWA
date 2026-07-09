@@ -1261,6 +1261,7 @@ textarea {
   padding: 12px 2px 6px;
 }
 .day-heading .date-sub { color: #999; font-weight: 400; }
+.overdue-heading { color: var(--color-accent-pest); }
 
 .empty-day {
   font-size: 12px;

@@ -489,6 +489,14 @@ function handleSubmit(event) {
     localStorage.setItem(LAST_BED_KEY, bedScope);
     updateSyncBadge();
 
+    // Optimistic: also insert into the logs cache (same pattern as sales), so
+    // the entry shows in the Activity tab while offline and render-time reads
+    // of the cache (e.g. the whole-farm watering blend) see it immediately.
+    // The next successful fetchLogs replaces the cache wholesale — no dupes.
+    const cachedLogs = JSON.parse(localStorage.getItem(LOGS_CACHE_KEY) || "[]");
+    cachedLogs.unshift(entry);
+    localStorage.setItem(LOGS_CACHE_KEY, JSON.stringify(cachedLogs));
+
     // Auto-complete a matching pre-planned task — logging the real activity
     // through the normal flow silently checks it off, no separate manual tap.
     // "all" (whole-farm) logs match tasks with no bed set the same way.
@@ -510,6 +518,13 @@ function handleSubmit(event) {
             saveBeds();
             renderBeds(bedsData);
         }
+    } else if (activity === "watering") {
+        // Whole-farm watering waters every bed — clear all watering alerts.
+        // (lastActivity is left alone: the server computes it per-bed only,
+        // so setting it here would just flicker back on the next fetch.)
+        bedsData.forEach(b => { b.lastWatered = date; });
+        saveBeds();
+        renderBeds(bedsData);
     }
 
     closeModal();
@@ -612,15 +627,35 @@ function lastActivityLabel(lastActivity) {
     return `Last: ${label} ${days}d ago`;
 }
 
+// Most recent whole-farm ("all"-scoped) watering log. The server's per-bed
+// lastWatered only counts logs tied to that bed's number, so a whole-farm
+// irrigation would otherwise never reset any bed's watering alert.
+function latestWholeFarmWatering() {
+    const logs = JSON.parse(localStorage.getItem(LOGS_CACHE_KEY) || "[]");
+    let latest = "";
+    logs.forEach(l => {
+        if (l.activityCategory === "watering" && String(l.bedNumber) === "all") {
+            const d = ymd(l.date);
+            if (d > latest) latest = d;
+        }
+    });
+    return latest || null;
+}
+
 function wateringAlert(bed) {
     if (!bed.crops.length) return "";
     // Tracks watering specifically (server-computed lastWatered), not just
     // "days since the most recent activity of any kind" — otherwise logging
     // e.g. pest control the day after watering would wrongly reset this.
-    const hasWatered = !!bed.lastWatered;
-    const days = hasWatered ? daysSince(bed.lastWatered) : null;
-    if (!hasWatered || days >= 3) {
-        const msg = !hasWatered ? "Not watered recently" : `Not watered in ${days}d`;
+    // Blend in whole-farm watering logs, which the server-side per-bed
+    // lastWatered can't see.
+    let lastWatered = bed.lastWatered ? ymd(bed.lastWatered) : null;
+    const farmWide = latestWholeFarmWatering();
+    if (farmWide && (!lastWatered || farmWide > lastWatered)) lastWatered = farmWide;
+
+    const days = lastWatered ? daysSince(lastWatered) : null;
+    if (!lastWatered || days >= 3) {
+        const msg = !lastWatered ? "Not watered recently" : `Not watered in ${days}d`;
         return `<p class="bed-water-alert">💧 ${msg}</p>`;
     }
     return "";
@@ -866,6 +901,10 @@ async function fetchBeds() {
         }
     } catch (e) {
         console.error("Could not load beds:", e);
+    } finally {
+        // Weather usually paints before beds load; its bed tie-in hint read an
+        // empty bedsData then. Re-render now that bed state is current.
+        if (lastWeatherData) renderWeather(lastWeatherData);
     }
 }
 
@@ -891,9 +930,14 @@ async function fetchWeather() {
     }
 }
 
+// Kept so the card can re-render when bedsData changes (the tie-in hint reads
+// bed watering state, and beds usually load after the first weather paint).
+let lastWeatherData = null;
+
 function renderWeather(data) {
     const container = document.getElementById("weatherCard");
     if (!container || !data.current || !data.daily) return;
+    lastWeatherData = data;
 
     const temp        = Math.round(data.current.temperature_2m);
     const icon         = weatherIcon(data.current.weather_code);
@@ -1700,8 +1744,11 @@ async function fetchTasks() {
     const cached = localStorage.getItem(TASKS_CACHE_KEY);
     if (cached) {
         try {
-            tasksData = JSON.parse(cached);
+            // Normalize here too, not just on the network path — a cache written
+            // before the ymd fix (or on another device) may hold full-ISO dates.
+            tasksData = JSON.parse(cached).map(t => ({ ...t, date: ymd(t.date) }));
             renderPlanView();
+            renderTodayTasks(); // offline, this is the only render Home gets
         } catch (e) { /* ignore corrupt cache */ }
     }
     try {
@@ -1770,6 +1817,8 @@ function renderPlanView() {
         const d = new Date(start); d.setDate(start.getDate() + i);
         days.push(localDateStr(d));
     }
+    const today   = days[0];
+    const lastDay = days[6];
 
     const byDate = {};
     tasksData.forEach(t => {
@@ -1777,14 +1826,37 @@ function renderPlanView() {
         byDate[t.date].push(t);
     });
 
-    container.innerHTML = days.map(dateStr => {
-        const dayTasks = (byDate[dateStr] || []).slice().sort((a, b) =>
-            (TIME_SLOT_ORDER[a.timeSlot] ?? 3) - (TIME_SLOT_ORDER[b.timeSlot] ?? 3)
-        );
+    const slotSort = (a, b) =>
+        (TIME_SLOT_ORDER[a.timeSlot] ?? 3) - (TIME_SLOT_ORDER[b.timeSlot] ?? 3);
+
+    // Past-dated tasks that were never completed — without this they'd vanish
+    // from every view the day after, looking like they were never saved.
+    const overdueDates = Object.keys(byDate)
+        .filter(d => d && d < today && byDate[d].some(t => t.status !== "done"))
+        .sort();
+    const overdueHtml = overdueDates.map(dateStr => {
+        const pending = byDate[dateStr].filter(t => t.status !== "done").sort(slotSort);
+        return `<div class="day-heading overdue-heading">Overdue · ${planDayLabel(dateStr)}</div>`
+            + pending.map(renderTaskCard).join("");
+    }).join("");
+
+    const weekHtml = days.map(dateStr => {
+        const dayTasks = (byDate[dateStr] || []).slice().sort(slotSort);
         const heading = `<div class="day-heading">${planDayLabel(dateStr)}</div>`;
         if (!dayTasks.length) return heading + `<div class="empty-day">Nothing planned</div>`;
         return heading + dayTasks.map(renderTaskCard).join("");
     }).join("");
+
+    // Tasks planned past the visible week — shown so a far-future date never
+    // looks like a failed save.
+    const laterDates = Object.keys(byDate).filter(d => d > lastDay).sort();
+    const laterHtml = laterDates.map(dateStr => {
+        const dayTasks = byDate[dateStr].slice().sort(slotSort);
+        return `<div class="day-heading">${planDayLabel(dateStr)}</div>`
+            + dayTasks.map(renderTaskCard).join("");
+    }).join("");
+
+    container.innerHTML = overdueHtml + weekHtml + laterHtml;
 }
 
 // --- Today's Tasks (Home) — compact glance list, not the full detail view ---
@@ -2004,6 +2076,7 @@ document.addEventListener("DOMContentLoaded", () => {
             processOfflineQueue().finally(() => {
                 fetchBeds();
                 fetchLogs();
+                fetchTasks(); // delegation flow: pick up tasks assigned remotely
             });
             fetchWeather(); // third-party API, independent of the offline queue/auth gate
         }

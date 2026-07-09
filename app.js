@@ -886,8 +886,24 @@ function renderWeather(data) {
         </div>`;
     }).join("");
 
-    // Tie-in with the existing watering alert: only worth a mention if rain
-    // is likely AND a bed is actually flagged as needing water.
+    // Always-on watering recommendation, driven purely by rain%: skip if rain
+    // is likely today, otherwise water — tomorrow's forecast breaks the tie
+    // when today looks dry-ish but relief is coming soon.
+    const tomorrowRain = data.daily.precipitation_probability_max[1];
+    let recIcon, recText;
+    if (todayRain >= 40) {
+        recIcon = "💧";
+        recText = "Skip watering — rain likely today";
+    } else if (tomorrowRain >= 40) {
+        recIcon = "🚿";
+        recText = "Water today — rain expected tomorrow, ease up after";
+    } else {
+        recIcon = "🚿";
+        recText = "Water today — no rain in sight";
+    }
+
+    // Tie-in with the existing per-bed watering alert: only worth a mention if
+    // rain is likely AND a bed is actually flagged as needing water.
     const hintBed = todayRain >= 40 ? bedsData.find(b => wateringAlert(b) !== "") : null;
     const hint = hintBed ? `
         <div class="weather-hint">
@@ -906,6 +922,10 @@ function renderWeather(data) {
                 <div class="weather-rain-pct">${todayRain}%</div>
                 <div class="weather-rain-label">Rain today</div>
             </div>
+        </div>
+        <div class="weather-recommendation">
+            <span>${recIcon}</span>
+            <span>${recText}</span>
         </div>
         <div class="weather-forecast-strip">${dayStrip}</div>
         ${hint}`;

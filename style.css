@@ -151,10 +151,17 @@ section {
 }
 
 /* ---------- Quick action grid ---------- */
-.quick-actions {
+.quick-actions-primary {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
+}
+
+.quick-actions-secondary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 10px;
 }
 
 .action-btn {
@@ -183,6 +190,17 @@ section {
 .action-btn .icon {
   font-size: 34px;
   line-height: 1;
+}
+
+.action-btn-sm {
+  min-height: 84px;
+  gap: 5px;
+  padding: 10px 4px;
+  font-size: 12.5px;
+}
+
+.action-btn-sm .icon {
+  font-size: 24px;
 }
 
 .action-btn.water   { background: var(--color-accent-water); }
@@ -278,7 +296,7 @@ section {
   right: 0;
   z-index: 20;
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   background: var(--color-bg);
   border-top: 2px solid var(--color-border);
 }
@@ -648,6 +666,15 @@ textarea {
   font-size: 10.5px; font-weight: 700; text-transform: uppercase;
   letter-spacing: 0.04em; color: var(--color-accent-water);
 }
+.weather-recommendation {
+  display: flex; align-items: center; gap: 7px;
+  margin-top: 11px; padding: 8px 10px;
+  background: rgba(255,255,255,0.6);
+  border: 1px solid #d3e6f2;
+  border-radius: 8px;
+  font-size: 12.5px; font-weight: 600; color: #2f5a75;
+}
+.weather-recommendation span:first-child { font-size: 15px; }
 .weather-forecast-strip {
   display: flex;
   margin-top: 12px;

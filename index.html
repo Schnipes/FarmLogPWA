@@ -76,24 +76,26 @@
       <!-- Quick log — secondary, for whole-farm or fast access -->
       <section aria-label="Quick actions">
         <p class="section-label">Quick log</p>
-        <div class="quick-actions">
+        <div class="quick-actions-primary">
           <button class="action-btn water" onclick="openModal('water')">
             <span class="icon" aria-hidden="true">💧</span>
             <span>Irrigate</span>
-          </button>
-          <button class="action-btn pest" onclick="openModal('pest')">
-            <span class="icon" aria-hidden="true">🐛</span>
-            <span>Pest Control</span>
           </button>
           <button class="action-btn harvest" onclick="openModal('harvest')">
             <span class="icon" aria-hidden="true">🧺</span>
             <span>Harvest</span>
           </button>
-          <button class="action-btn crop" onclick="openModal('crop')">
+        </div>
+        <div class="quick-actions-secondary">
+          <button class="action-btn action-btn-sm pest" onclick="openModal('pest')">
+            <span class="icon" aria-hidden="true">🐛</span>
+            <span>Pest Control</span>
+          </button>
+          <button class="action-btn action-btn-sm crop" onclick="openModal('crop')">
             <span class="icon" aria-hidden="true">🌱</span>
             <span>Sow Crop</span>
           </button>
-          <button class="action-btn sale" onclick="openSaleModal()">
+          <button class="action-btn action-btn-sm sale" onclick="openSaleModal()">
             <span class="icon" aria-hidden="true">💰</span>
             <span>Log Sale</span>
           </button>

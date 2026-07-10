@@ -207,6 +207,45 @@
     assertEqual(getWateringStatus(bed({ crops: [], lastWatered: null })), { needsWater: false, days: null });
   });
 
+  test("latestPlotWatering() only picks up matching plot-scoped logs, ignores deleted, returns null when none", () => {
+    localStorage.setItem("farmlog_logs_cache", JSON.stringify([
+      { id: "l1", date: daysAgoStr(5), bedNumber: "9", activityCategory: "watering", status: "active" },
+      { id: "l2", date: daysAgoStr(3), bedNumber: "all", activityCategory: "watering", status: "active" },
+      { id: "l3", date: daysAgoStr(2), bedNumber: "plot_x", activityCategory: "watering", status: "active" },
+      { id: "l4", date: daysAgoStr(1), bedNumber: "plot_x", activityCategory: "watering", status: "deleted" },
+      { id: "l5", date: daysAgoStr(1), bedNumber: "plot_y", activityCategory: "watering", status: "active" }
+    ]));
+    assertEqual(latestPlotWatering("plot_x"), daysAgoStr(2));
+    assertEqual(latestPlotWatering("plot_z"), null);
+    assertEqual(latestPlotWatering(null), null);
+  });
+
+  test("getWateringStatus() 3-way blend — plot-scoped log newer than both bed-own and whole-farm wins", () => {
+    localStorage.setItem("farmlog_logs_cache", JSON.stringify([
+      { id: "l1", date: daysAgoStr(5), bedNumber: "all", activityCategory: "watering", status: "active" },
+      { id: "l2", date: daysAgoStr(1), bedNumber: "plot_row1", activityCategory: "watering", status: "active" }
+    ]));
+    const status = getWateringStatus(bed({ lastWatered: daysAgoStr(9), plotId: "plot_row1" }));
+    assertEqual(status, { needsWater: false, days: 1 });
+  });
+
+  test("getWateringStatus() 3-way blend — whole-farm log newer than plot wins", () => {
+    localStorage.setItem("farmlog_logs_cache", JSON.stringify([
+      { id: "l1", date: daysAgoStr(1), bedNumber: "all", activityCategory: "watering", status: "active" },
+      { id: "l2", date: daysAgoStr(9), bedNumber: "plot_row1", activityCategory: "watering", status: "active" }
+    ]));
+    const status = getWateringStatus(bed({ lastWatered: daysAgoStr(9), plotId: "plot_row1" }));
+    assertEqual(status, { needsWater: false, days: 1 });
+  });
+
+  test("a bed with no plotId is unaffected by any plot-scoped log", () => {
+    localStorage.setItem("farmlog_logs_cache", JSON.stringify([
+      { id: "l1", date: daysAgoStr(1), bedNumber: "plot_row1", activityCategory: "watering", status: "active" }
+    ]));
+    const status = getWateringStatus(bed({ lastWatered: daysAgoStr(4), plotId: "" }));
+    assertEqual(status, { needsWater: true, days: 4 });
+  });
+
   // ---------------------------------------------------------------------
   group("getBed() — single front door for bed lookup");
 
@@ -219,6 +258,36 @@
   test("returns undefined for a bed number that doesn't exist", () => {
     bedsData = [{ bedNumber: 5, crops: [] }];
     assertEqual(getBed(999), undefined);
+  });
+
+  // ---------------------------------------------------------------------
+  group("getPlot() / bedsInPlot() / plotWateringRollup() — plot membership");
+
+  test("getPlot() finds a plot by id", () => {
+    plotsData = [{ id: "p1", name: "Eggplant Row", status: "active" }];
+    assertEqual(getPlot("p1").name, "Eggplant Row");
+    assertEqual(getPlot("nope"), undefined);
+  });
+
+  test("bedsInPlot() filters by exclusive plotId membership", () => {
+    bedsData = [
+      { bedNumber: 1, plotId: "p1", crops: [] },
+      { bedNumber: 2, plotId: "p1", crops: [] },
+      { bedNumber: 3, plotId: "p2", crops: [] },
+      { bedNumber: 4, plotId: "", crops: [] }
+    ];
+    assertEqual(bedsInPlot("p1").map(b => b.bedNumber), [1, 2]);
+    assertEqual(bedsInPlot("p2").map(b => b.bedNumber), [3]);
+  });
+
+  test("plotWateringRollup() counts flagged beds, ignoring an empty-crops bed", () => {
+    localStorage.setItem("farmlog_logs_cache", "[]");
+    bedsData = [
+      { bedNumber: 1, plotId: "p1", crops: [{ cropName: "Eggplant" }], lastWatered: daysAgoStr(5) },
+      { bedNumber: 2, plotId: "p1", crops: [{ cropName: "Eggplant" }], lastWatered: daysAgoStr(1) },
+      { bedNumber: 3, plotId: "p1", crops: [], lastWatered: daysAgoStr(9) } // empty bed — never flagged
+    ];
+    assertEqual(plotWateringRollup("p1"), { total: 3, flagged: 1 });
   });
 
   // ---------------------------------------------------------------------
@@ -373,6 +442,29 @@
   test("non-string input is stringified, not crashed on", () => {
     assertEqual(escapeHtml(42), "42");
     assertEqual(escapeHtml(null), "null");
+  });
+
+  // ---------------------------------------------------------------------
+  group("resolveLogScopeLabel() — shared by renderLogs() and CSV export");
+
+  test("blank or 'all' bedNumber resolves to Whole Farm", () => {
+    assertEqual(resolveLogScopeLabel({ bedNumber: "all" }), "Whole Farm");
+    assertEqual(resolveLogScopeLabel({ bedNumber: "" }), "Whole Farm");
+    assertEqual(resolveLogScopeLabel({ bedNumber: null }), "Whole Farm");
+  });
+
+  test("a real bed number resolves to 'Bed N'", () => {
+    assertEqual(resolveLogScopeLabel({ bedNumber: "7" }), "Bed 7");
+  });
+
+  test("a plot-scoped bedNumber resolves to the plot's name", () => {
+    plotsData = [{ id: "plot_x", name: "Eggplant Row", status: "active" }];
+    assertEqual(resolveLogScopeLabel({ bedNumber: "plot_x" }), "Eggplant Row");
+  });
+
+  test("a plot-scoped bedNumber for a since-deleted plot falls back gracefully", () => {
+    plotsData = [];
+    assertEqual(resolveLogScopeLabel({ bedNumber: "plot_gone" }), "Plot (deleted)");
   });
 
   // ---------------------------------------------------------------------

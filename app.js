@@ -10,6 +10,7 @@ const AUTH_TOKEN_KEY     = "farmlog_auth_token";
 const CATEGORY_COLOR_KEY = "farmlog_category_colors";
 const WEATHER_CACHE_KEY  = "farmlog_weather_cache";
 const TASKS_CACHE_KEY    = "farmlog_tasks_cache";
+const PLOTS_CACHE_KEY    = "farmlog_plots_cache";
 const GOOGLE_SCRIPT_URL  = "https://script.google.com/macros/s/AKfycbyQSzKWjoj3rD4_d045XN4csdYW5VXIHxV9qHviMBUc7iJvacGRHHuBLQPUTecMCBmswQ/exec";
 
 // Kudat, Sabah — hardcoded since this is a single-farm app.
@@ -65,6 +66,7 @@ const TIME_SLOT_SHORT = { Morning: "Morn", Afternoon: "Aft", Evening: "Eve", Any
 let bedsData          = [];
 let formulasData      = [];
 let tasksData         = [];
+let plotsData         = [];
 let selectedTaskFormulaId = null;
 // Highest bed number ever used (retired beds included). Persisted so numbers
 // are never reused, even across reloads while offline.
@@ -206,14 +208,15 @@ function openModal(type) {
     document.getElementById("logDate").value = todayString();
     document.getElementById("activityCategory").value = DEFAULT_CATEGORY[type] || "";
 
-    // Restore last-used bed if it still exists in bedsData
+    // Restore last-used bed/plot if it still exists
     const lastBed = localStorage.getItem(LAST_BED_KEY);
     const scopeEl = document.getElementById("bedScope");
-    if (lastBed && (lastBed === "all" || bedsData.some(b => String(b.bedNumber) === String(lastBed)))) {
-        scopeEl.value = lastBed;
-    } else {
-        scopeEl.value = "all";
-    }
+    const stillValid = lastBed && (
+        lastBed === "all" ||
+        bedsData.some(b => String(b.bedNumber) === String(lastBed)) ||
+        (lastBed.startsWith("plot_") && !!getPlot(lastBed))
+    );
+    scopeEl.value = stillValid ? lastBed : "all";
 
     updateBedFields();
     document.getElementById("modalOverlay").classList.add("open");
@@ -260,13 +263,24 @@ function toggleFinancials() {
 
 // --- 5. Form — Bed & Crop Fields ---
 function populateBedDropdown() {
-    const select = document.getElementById("bedScope");
-    while (select.options.length > 1) select.remove(1);
+    const plotGroup = document.getElementById("plotScopeGroup");
+    const bedGroup  = document.getElementById("bedScopeGroup");
+    plotGroup.innerHTML = "";
+    bedGroup.innerHTML  = "";
+    plotsData.forEach(plot => {
+        // plot.id already reads "plot_<timestamp>" (ID-generation convention,
+        // not a wrapper prefix) — used directly, not re-prefixed, to match
+        // latestPlotWatering()/getBeds()'s plot-watering blend.
+        const opt = document.createElement("option");
+        opt.value = plot.id;
+        opt.textContent = plot.name;
+        plotGroup.appendChild(opt);
+    });
     bedsData.forEach(bed => {
         const opt = document.createElement("option");
         opt.value = bed.bedNumber;
         opt.textContent = "Bed " + bed.bedNumber;
-        select.appendChild(opt);
+        bedGroup.appendChild(opt);
     });
 }
 
@@ -275,10 +289,12 @@ function updateBedFields() {
     const activity   = document.getElementById("activityCategory").value;
     const isSowing   = activity === "sowing";
     const isHarvest  = activity === "harvest";
-    const isSpecific = scope !== "all";
+    const isPlot     = scope.startsWith("plot_");
+    const isSpecific = scope !== "all" && !isPlot; // true only for a single real bed
 
-    // Sowing on whole farm makes no sense — force to first bed if "all" selected
-    if (isSowing && !isSpecific && bedsData.length) {
+    // Sowing needs exactly one bed (a sown crop batch belongs to one bed) —
+    // whole-farm and plot scope both get forced to the first real bed.
+    if (isSowing && (scope === "all" || isPlot) && bedsData.length) {
         document.getElementById("bedScope").value = bedsData[0].bedNumber;
         updateBedFields();
         return;
@@ -302,13 +318,22 @@ function updateBedFields() {
             contextBar.innerHTML = '<span style="color:#888;">Empty bed — ready to sow</span>';
         }
         contextBar.hidden = false;
+    } else if (isPlot) {
+        // Aggregate context — union of crop names across every bed in the plot.
+        const members = bedsInPlot(scope);
+        const names = [...new Set(members.flatMap(b => b.crops.map(c => c.cropName)))];
+        contextBar.innerHTML = names.length
+            ? names.map(n => `<span>🌱 ${escapeHtml(n)}</span>`).join("")
+            : '<span style="color:#888;">No crops growing in this plot</span>';
+        contextBar.hidden = false;
     } else {
         contextBar.hidden = true;
     }
 
-    if (!isSpecific) return;
+    if (isPlot && !isHarvest) return; // sowing already redirected above; nothing else to fill in for a plot
+    if (!isSpecific && !isPlot) return;
 
-    const bed = getBed(scope);
+    const bed = isSpecific ? getBed(scope) : null;
 
     if (isSowing) {
         document.getElementById("newCropField").hidden  = false;
@@ -316,12 +341,19 @@ function updateBedFields() {
 
     } else if (isHarvest) {
         const list = document.getElementById("harvestCropsList");
-        if (bed && bed.crops.length) {
-            list.innerHTML = bed.crops.map((c, i) => `
+        // Each checkbox carries data-bed so handleSubmit knows which specific
+        // bed a checked crop belongs to — batches stay inherently per-bed even
+        // when the log itself is plot-scoped.
+        const harvestBeds = isPlot ? bedsInPlot(scope) : (bed ? [bed] : []);
+        const rows = harvestBeds.flatMap((b, bi) =>
+            b.crops.map((c, i) => `
             <label class="harvest-crop-check">
-                <input type="checkbox" name="harvestCrop" value="${escapeHtml(String(c.id || ""))}" data-crop="${escapeHtml(c.cropName)}" id="hcrop_${i}">
-                <span>${escapeHtml(c.cropName)}</span>
-            </label>`).join("");
+                <input type="checkbox" name="harvestCrop" value="${escapeHtml(String(c.id || ""))}" data-crop="${escapeHtml(c.cropName)}" data-bed="${escapeHtml(String(b.bedNumber))}" id="hcrop_${bi}_${i}">
+                <span>${escapeHtml(c.cropName)}${isPlot ? ` <span style="color:#888;">· Bed ${escapeHtml(String(b.bedNumber))}</span>` : ""}</span>
+            </label>`)
+        );
+        if (rows.length) {
+            list.innerHTML = rows.join("");
             document.getElementById("harvestCropsField").hidden = false;
         }
         document.getElementById("harvestWeightField").hidden = false;
@@ -345,6 +377,16 @@ function saveBeds() {
 // the file. One place to fix if the lookup rule ever needs to change.
 function getBed(bedNumber) {
     return bedsData.find(b => String(b.bedNumber) === String(bedNumber));
+}
+
+function getPlot(plotId) {
+    return plotsData.find(p => String(p.id) === String(plotId));
+}
+
+// Every bed currently belonging to this plot (exclusive membership — a bed
+// is in at most one plot, so this is a plain filter, no join needed).
+function bedsInPlot(plotId) {
+    return bedsData.filter(b => String(b.plotId || "") === String(plotId));
 }
 
 function queueAction(payload) {
@@ -434,6 +476,11 @@ function handleSubmit(event) {
         cropName:         activity === "sowing"  ? cropName :
                            activity === "harvest" ? harvestedCropNames.join(", ") : (() => {
             if (bedScope === "all") return "";
+            if (bedScope.startsWith("plot_")) {
+                const names = new Set();
+                bedsInPlot(bedScope).forEach(b => b.crops.forEach(c => names.add(c.cropName)));
+                return [...names].join(", ");
+            }
             const bed = getBed(bedScope);
             return bed && bed.crops.length ? bed.crops.map(c => c.cropName).join(", ") : "";
         })(),
@@ -466,20 +513,27 @@ function handleSubmit(event) {
         populateBedDropdown();
     }
 
-    if (activity === "harvest" && bedScope !== "all") {
+    if (activity === "harvest") {
+        // Each checkbox carries data-bed (set in updateBedFields), which is
+        // the specific bed a checked crop belongs to — batches stay
+        // inherently per-bed even when the log itself is plot-scoped, so a
+        // plot harvest still writes one updateBatch per bed/crop pair.
+        // (Whole-farm scope never populates this checklist, so `checked` is
+        // simply empty there — no guard needed.)
         const checked = [...document.querySelectorAll('input[name="harvestCrop"]:checked')];
         checked.forEach(cb => {
             const batchId = cb.value;
             const cropNm  = cb.dataset.crop;
+            const bedNum  = cb.dataset.bed;
             queue.push({
                 action:      "updateBatch",
                 id:          batchId,      // target this exact batch (handles duplicate crop names)
-                bedNumber:   bedScope,
+                bedNumber:   bedNum,
                 cropName:    cropNm,
                 harvestDate: date,
                 status:      "done"
             });
-            const bed = getBed(bedScope);
+            const bed = getBed(bedNum);
             if (bed) {
                 // Remove the specific batch; fall back to name if id is missing
                 // (crop sown this session, not yet refetched with an id).
@@ -516,8 +570,18 @@ function handleSubmit(event) {
     );
     if (matchingTask) toggleTaskDone(matchingTask.id);
 
-    // Optimistically update lastActivity on the bed card
-    if (bedScope !== "all") {
+    // Optimistically update lastActivity on the bed card. Plot check comes
+    // BEFORE the "!== all" single-bed branch — a plot value is also
+    // "!== all", so checking it second would silently fall into the
+    // single-bed path and no-op via getBed() returning undefined.
+    if (bedScope.startsWith("plot_")) {
+        // Plot-wide watering waters every member bed — clear their alerts.
+        // (lastActivity left alone, same reasoning as whole-farm below.)
+        const members = bedsInPlot(bedScope);
+        if (activity === "watering") members.forEach(b => { b.lastWatered = date; });
+        saveBeds();
+        renderBeds(bedsData);
+    } else if (bedScope !== "all") {
         const bed = getBed(bedScope);
         if (bed) {
             bed.lastActivity = { type: activity, date };
@@ -537,7 +601,9 @@ function handleSubmit(event) {
     closeModal();
 
     // Richer toast: "Harvest logged · Bed 2"
-    const bedLabel = bedScope === "all" ? "Whole Farm" : `Bed ${bedScope}`;
+    const bedLabel = bedScope === "all" ? "Whole Farm" :
+                      bedScope.startsWith("plot_") ? (getPlot(bedScope)?.name || "Plot") :
+                      `Bed ${bedScope}`;
     const actLabel = CATEGORY_LABEL[activity] || activity;
     showToast(`${actLabel} logged · ${bedLabel}`);
 
@@ -649,19 +715,42 @@ function latestWholeFarmWatering() {
     return latest || null;
 }
 
+// Same idea as latestWholeFarmWatering(), keyed by plot instead of global —
+// a plot-scoped watering log resets every member bed's alert the same way a
+// whole-farm log resets every bed's. A plot-scoped log's bedNumber is simply
+// the plot's own id (plot ids already read as "plot_<timestamp>" — that's ID
+// generation convention, not a separate wrapper prefix, so no re-prefixing
+// here). Kept as its own pure function (not inlined) so it stays
+// independently testable.
+function latestPlotWatering(plotId) {
+    if (!plotId) return null;
+    const logs = JSON.parse(localStorage.getItem(LOGS_CACHE_KEY) || "[]");
+    let latest = "";
+    logs.forEach(l => {
+        if (l.activityCategory === "watering" && String(l.bedNumber) === String(plotId) && l.status !== "deleted") {
+            const d = ymd(l.date);
+            if (d > latest) latest = d;
+        }
+    });
+    return latest || null;
+}
+
 // Pure decision, no HTML — returns a plain data value so anything (a bed
-// card, a future plot rollup like "6 of 24 beds") can reuse the same rule
-// without re-deriving it or parsing a rendered string.
+// card, a plot rollup like "6 of 24 beds") can reuse the same rule without
+// re-deriving it or parsing a rendered string.
 function getWateringStatus(bed) {
     if (!bed.crops.length) return { needsWater: false, days: null };
     // Tracks watering specifically (server-computed lastWatered), not just
     // "days since the most recent activity of any kind" — otherwise logging
     // e.g. pest control the day after watering would wrongly reset this.
-    // Blend in whole-farm watering logs, which the server-side per-bed
-    // lastWatered can't see.
+    // Blend in whole-farm and plot-wide watering logs, which the server-side
+    // per-bed lastWatered can't see on its own — whichever date is newest wins.
     let lastWatered = bed.lastWatered ? ymd(bed.lastWatered) : null;
     const farmWide = latestWholeFarmWatering();
     if (farmWide && (!lastWatered || farmWide > lastWatered)) lastWatered = farmWide;
+
+    const plotWide = bed.plotId ? latestPlotWatering(bed.plotId) : null;
+    if (plotWide && (!lastWatered || plotWide > lastWatered)) lastWatered = plotWide;
 
     const days = lastWatered ? daysSince(lastWatered) : null;
     const needsWater = !lastWatered || days >= 3;
@@ -684,6 +773,90 @@ function daysSince(dateStr) {
     return Math.floor((today - planted) / 86400000);
 }
 
+// Extracted from renderBeds() unchanged, so both the solo-bed list and the
+// (unaffected) empty-beds list keep identical markup with zero duplication.
+function renderGrowingBedCard(bed) {
+    const lastLine = lastActivityLabel(bed.lastActivity);
+    return `
+    <div class="batch-card bed-card-clickable" onclick="openBedDetail(${bed.bedNumber})">
+        <div class="bed-card-header">
+            <p class="batch-title">Bed ${bed.bedNumber}${bed.name ? ` <span class="bed-custom-name">· ${escapeHtml(bed.name)}</span>` : ""}</p>
+            <span class="bed-chevron">›</span>
+        </div>
+        <div class="bed-crops">
+            ${bed.crops.map(c => `
+            <div class="bed-crop-row">
+                <span>🌱 ${escapeHtml(c.cropName)}</span>
+                <span class="bed-day-badge">Day ${daysSince(c.plantingDate)}</span>
+            </div>`).join("")}
+        </div>
+        ${lastLine ? `<p class="bed-last-activity">${escapeHtml(lastLine)}</p>` : ""}
+        ${wateringAlert(bed)}
+    </div>`;
+}
+
+function renderEmptyBedCard(bed) {
+    const lastLine = lastActivityLabel(bed.lastActivity);
+    return `
+    <div class="batch-card bed-card-empty bed-card-clickable" onclick="openBedDetail(${bed.bedNumber})">
+        <div class="bed-card-header">
+            <p class="batch-title" style="color:#888;">Bed ${bed.bedNumber}${bed.name ? ` <span class="bed-custom-name">· ${escapeHtml(bed.name)}</span>` : ""}</p>
+            <span class="bed-chevron">›</span>
+        </div>
+        <p class="bed-empty-label">Ready to sow</p>
+        ${lastLine ? `<p class="bed-last-activity">${escapeHtml(lastLine)}</p>` : ""}
+    </div>`;
+}
+
+// Partitions a bed list into plot groups and solo (unplotted, or plotted but
+// the plot no longer resolves — e.g. deleted — falls back to solo rather
+// than silently vanishing).
+function groupByPlot(bedList) {
+    const grouped = {};
+    const solo = [];
+    bedList.forEach(b => {
+        if (b.plotId && getPlot(b.plotId)) {
+            (grouped[b.plotId] = grouped[b.plotId] || []).push(b);
+        } else {
+            solo.push(b);
+        }
+    });
+    return { grouped, solo };
+}
+
+// { total, flagged } — how many of a plot's beds currently need watering.
+// Pure aside from reading bedsInPlot/getWateringStatus, kept separate so it's
+// unit-testable without touching the DOM.
+function plotWateringRollup(plotId) {
+    const beds = bedsInPlot(plotId);
+    const flagged = beds.filter(b => getWateringStatus(b).needsWater);
+    return { total: beds.length, flagged: flagged.length };
+}
+
+function renderPlotCard(plotId, beds) {
+    const plot = getPlot(plotId);
+    const label = plot ? plot.name : "Plot";
+    const cropNames = [...new Set(beds.flatMap(b => b.crops.map(c => c.cropName)))];
+    const chips = cropNames.length
+        ? cropNames.map(n => `<span class="tag">${escapeHtml(n)}</span>`).join("")
+        : '<span style="color:#888;font-size:13px;">Empty</span>';
+
+    const { total, flagged } = plotWateringRollup(plotId);
+    const wateringLine = flagged
+        ? `<p class="bed-water-alert">💧 ${flagged} of ${total} beds not watered</p>`
+        : "";
+
+    return `
+    <div class="batch-card bed-card-clickable" onclick="openPlotDetail('${escapeHtml(String(plotId))}')">
+        <div class="bed-card-header">
+            <p class="batch-title">${escapeHtml(label)} <span class="bed-custom-name">· ${beds.length} bed${beds.length === 1 ? "" : "s"}</span></p>
+            <span class="bed-chevron">›</span>
+        </div>
+        <div class="bed-crops">${chips}</div>
+        ${wateringLine}
+    </div>`;
+}
+
 function renderBeds(beds) {
     const container = document.getElementById("batchList");
     if (!beds.length) {
@@ -702,41 +875,16 @@ function renderBeds(beds) {
 
     if (growing.length) {
         html += `<p class="bed-group-label">Growing (${growing.length})</p>`;
-        html += growing.map(bed => {
-        const lastLine = lastActivityLabel(bed.lastActivity);
-        return `
-        <div class="batch-card bed-card-clickable" onclick="openBedDetail(${bed.bedNumber})">
-            <div class="bed-card-header">
-                <p class="batch-title">Bed ${bed.bedNumber}${bed.name ? ` <span class="bed-custom-name">· ${escapeHtml(bed.name)}</span>` : ""}</p>
-                <span class="bed-chevron">›</span>
-            </div>
-            <div class="bed-crops">
-                ${bed.crops.map(c => `
-                <div class="bed-crop-row">
-                    <span>🌱 ${escapeHtml(c.cropName)}</span>
-                    <span class="bed-day-badge">Day ${daysSince(c.plantingDate)}</span>
-                </div>`).join("")}
-            </div>
-            ${lastLine ? `<p class="bed-last-activity">${escapeHtml(lastLine)}</p>` : ""}
-            ${wateringAlert(bed)}
-        </div>`;
-    }).join("");
+        const { grouped, solo } = groupByPlot(growing);
+        html += Object.keys(grouped).map(plotId => renderPlotCard(plotId, grouped[plotId])).join("");
+        html += solo.map(renderGrowingBedCard).join("");
     }
 
     if (empty.length) {
         html += `<p class="bed-group-label" style="margin-top:16px;">Empty (${empty.length})</p>`;
-        html += empty.map(bed => {
-            const lastLine = lastActivityLabel(bed.lastActivity);
-            return `
-        <div class="batch-card bed-card-empty bed-card-clickable" onclick="openBedDetail(${bed.bedNumber})">
-            <div class="bed-card-header">
-                <p class="batch-title" style="color:#888;">Bed ${bed.bedNumber}${bed.name ? ` <span class="bed-custom-name">· ${escapeHtml(bed.name)}</span>` : ""}</p>
-                <span class="bed-chevron">›</span>
-            </div>
-            <p class="bed-empty-label">Ready to sow</p>
-            ${lastLine ? `<p class="bed-last-activity">${escapeHtml(lastLine)}</p>` : ""}
-        </div>`;
-        }).join("");
+        const { grouped, solo } = groupByPlot(empty);
+        html += Object.keys(grouped).map(plotId => renderPlotCard(plotId, grouped[plotId])).join("");
+        html += solo.map(renderEmptyBedCard).join("");
     }
 
     container.innerHTML = html;
@@ -798,6 +946,7 @@ function openBedDetail(bedNum) {
 function closeBedDetail() {
     document.getElementById("bedDetailOverlay").classList.remove("open");
     document.getElementById("bedRenameRow").hidden = true;
+    document.getElementById("bedPlotRow").hidden = true;
     document.body.style.overflow = "";
 }
 
@@ -827,6 +976,40 @@ function saveBedName() {
     queueAction({ action: "updateBed", bedNumber: bed.bedNumber, name });
     processOfflineQueue();
     showToast(name ? `Renamed to "${name}"` : "Name cleared");
+}
+
+// Single-bed plot reassignment — deliberately a separate, non-reconciling
+// action (setBedPlot/removeBedFromPlot) rather than reusing the bulk
+// assignBedsToPlot, which would wipe out every OTHER bed in the target plot.
+function toggleBedPlotPicker() {
+    const row = document.getElementById("bedPlotRow");
+    row.hidden = !row.hidden;
+    if (!row.hidden) {
+        const bed = getBed(selectedBedForLog);
+        const select = document.getElementById("bedPlotSelect");
+        select.innerHTML = '<option value="">No plot</option>' +
+            plotsData.map(p => `<option value="${escapeHtml(String(p.id))}">${escapeHtml(p.name)}</option>`).join("");
+        select.value = bed?.plotId || "";
+    }
+}
+
+function saveBedPlot() {
+    const plotId = document.getElementById("bedPlotSelect").value;
+    const bed = getBed(selectedBedForLog);
+    if (!bed) return;
+
+    bed.plotId = plotId;
+    saveBeds();
+    renderBeds(bedsData);
+    document.getElementById("bedPlotRow").hidden = true;
+
+    if (plotId) {
+        queueAction({ action: "setBedPlot", bedNumber: bed.bedNumber, plotId });
+    } else {
+        queueAction({ action: "removeBedFromPlot", bedNumber: bed.bedNumber });
+    }
+    processOfflineQueue();
+    showToast(plotId ? `Added to ${getPlot(plotId)?.name || "plot"}` : "Removed from plot");
 }
 
 function deleteBed() {
@@ -876,7 +1059,7 @@ function addBed() {
         status:    "active"
     };
 
-    bedsData.push({ bedNumber: nextNum, location: "commercial", crops: [] });
+    bedsData.push({ bedNumber: nextNum, location: "commercial", plotId: "", crops: [] });
     saveBeds();
     renderBeds(bedsData);
     populateBedDropdown();
@@ -1107,6 +1290,32 @@ async function fetchFormulas() {
     }
 }
 
+// Plots have no dedicated list view of their own — they feed into the Home
+// bed-card grouping and the log form's scope dropdown, so there's no
+// container to paint a loading/error state into here; just cache + re-render
+// whatever already depends on plotsData.
+async function fetchPlots() {
+    const cached = localStorage.getItem(PLOTS_CACHE_KEY);
+    if (cached) {
+        try { plotsData = JSON.parse(cached); } catch (e) { /* ignore corrupt cache */ }
+    }
+    try {
+        const res  = await fetch(withToken(GOOGLE_SCRIPT_URL + "?action=getPlots"));
+        const data = await res.json();
+        if (data.plots) {
+            plotsData = data.plots;
+            localStorage.setItem(PLOTS_CACHE_KEY, JSON.stringify(plotsData));
+        }
+    } catch (e) {
+        console.error("Could not load plots:", e);
+    } finally {
+        // Plot names may arrive after beds/the log form already rendered —
+        // refresh both dependents regardless of whether the fetch succeeded.
+        renderBeds(bedsData);
+        populateBedDropdown();
+    }
+}
+
 // --- 11. Log Data (Activity Tab) ---
 function shortDate(dateStr) {
     const d = new Date(ymd(dateStr) + "T00:00:00");
@@ -1125,9 +1334,13 @@ function dateGroupLabel(dateStr) {
 function renderBedFilterChips() {
     const container = document.getElementById("bedFilterChips");
     if (!container) return;
-    const chips = [{ label: "All beds", value: "all" }, ...bedsData.map(b => ({ label: "Bed " + b.bedNumber, value: String(b.bedNumber) }))];
+    const chips = [
+        { label: "All beds", value: "all" },
+        ...plotsData.map(p => ({ label: "🗂️ " + p.name, value: String(p.id) })),
+        ...bedsData.map(b => ({ label: "Bed " + b.bedNumber, value: String(b.bedNumber) }))
+    ];
     container.innerHTML = chips.map(c =>
-        `<button class="bed-filter-chip${activeLogFilter === c.value ? " active" : ""}" onclick="filterLogs('${c.value}')">${c.label}</button>`
+        `<button class="bed-filter-chip${activeLogFilter === c.value ? " active" : ""}" onclick="filterLogs('${escapeHtml(c.value)}')">${escapeHtml(c.label)}</button>`
     ).join("");
 }
 
@@ -1177,6 +1390,19 @@ function renderCombinedActivity() {
     renderLogs([...logs, ...saleEntries]);
 }
 
+// Shared by renderLogs() and exportActivityCsv() — both need to turn a raw
+// log.bedNumber ("all", "plot_<id>", a real bed number, or blank/sale) into
+// a human label. Pure and DOM-free, so it's directly unit-testable.
+function resolveLogScopeLabel(log) {
+    const bn = String(log.bedNumber || "");
+    if (!bn || bn === "all") return "Whole Farm";
+    if (bn.startsWith("plot_")) {
+        const plot = getPlot(bn);
+        return plot ? plot.name : "Plot (deleted)";
+    }
+    return `Bed ${bn}`;
+}
+
 function csvEscape(val) {
     const s = String(val ?? "");
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -1197,7 +1423,7 @@ function exportActivityCsv() {
         rows.push([
             "Log",
             ymd(l.date),
-            l.bedNumber && l.bedNumber !== "all" ? l.bedNumber : "Whole Farm",
+            resolveLogScopeLabel(l),
             CATEGORY_LABEL[l.activityCategory] || l.activityCategory,
             [l.cropName, l.inputsUsed].filter(Boolean).join(" · "),
             l.activityCategory === "harvest" ? (l.weight || "") : "",
@@ -1287,8 +1513,7 @@ function renderLogs(logs) {
             const cards = [...groups[dateKey]].reverse().map(log => {
                 const icon       = CATEGORY_ICON[log.activityCategory]  || "📝";
                 const label      = CATEGORY_LABEL[log.activityCategory] || escapeHtml(log.activityCategory);
-                const bedNum     = log.bedNumber && log.bedNumber !== "all" ? log.bedNumber : null;
-                const scopeLabel = bedNum ? `Bed ${escapeHtml(String(bedNum))}` : "Whole Farm";
+                const scopeLabel = escapeHtml(resolveLogScopeLabel(log));
                 const isSale = log.activityCategory === "sale";
 
                 let body = "";
@@ -2035,7 +2260,138 @@ function handleTaskSubmit(event) {
     processOfflineQueue();
 }
 
-// --- 16. App Initialization ---
+// --- 16. Plots (group beds for bulk logging + a collapsed Home view) ---
+let editingPlotId = null;
+let currentPlotId = null; // which plot's detail sheet is currently open
+
+function openPlotAssignModal(plotId = null) {
+    editingPlotId = plotId;
+    const plot = plotId ? getPlot(plotId) : null;
+    document.getElementById("plotModalTitle").textContent = plot ? "Edit Plot" : "New Plot";
+    document.getElementById("plotSubmitBtn").textContent  = plot ? "Save changes" : "Save plot";
+    document.getElementById("plotName").value = plot ? plot.name : "";
+    document.getElementById("plotName").classList.remove("invalid");
+
+    // Checklist of every bed — pre-checked if already in this plot. A bed
+    // currently in a DIFFERENT plot still shows, with a small note, since
+    // checking it here moves it (exclusive membership).
+    const list = document.getElementById("plotBedChecklist");
+    list.innerHTML = bedsData.map(b => {
+        const checked = plotId && String(b.plotId || "") === String(plotId);
+        const otherPlot = b.plotId && String(b.plotId) !== String(plotId) ? getPlot(b.plotId) : null;
+        const note = otherPlot ? ` <span style="color:#888;">(currently in ${escapeHtml(otherPlot.name)})</span>` : "";
+        return `
+        <label class="harvest-crop-check">
+            <input type="checkbox" name="plotBed" value="${escapeHtml(String(b.bedNumber))}"${checked ? " checked" : ""}>
+            <span>Bed ${escapeHtml(String(b.bedNumber))}${b.name ? " · " + escapeHtml(b.name) : ""}${note}</span>
+        </label>`;
+    }).join("");
+
+    document.getElementById("plotModalOverlay").classList.add("open");
+    document.body.style.overflow = "hidden";
+}
+
+function closePlotAssignModal() {
+    document.getElementById("plotModalOverlay").classList.remove("open");
+    document.body.style.overflow = "";
+    editingPlotId = null;
+}
+
+document.getElementById("plotModalOverlay").addEventListener("click", function (e) {
+    if (e.target === this) closePlotAssignModal();
+});
+
+function handlePlotSubmit(event) {
+    event.preventDefault();
+    const name = document.getElementById("plotName").value.trim();
+    if (!name) {
+        document.getElementById("plotName").classList.add("invalid");
+        return;
+    }
+
+    const checkedBeds = [...document.querySelectorAll('input[name="plotBed"]:checked')].map(cb => cb.value);
+
+    const isEdit = editingPlotId !== null;
+    const plotId = isEdit ? editingPlotId : "plot_" + Date.now();
+
+    if (isEdit) {
+        const plot = getPlot(plotId);
+        if (plot) plot.name = name;
+        queueAction({ action: "renamePlot", id: plotId, name });
+    } else {
+        plotsData.push({ id: plotId, name, status: "active" });
+        queueAction({ action: "addPlot", id: plotId, name });
+    }
+    localStorage.setItem(PLOTS_CACHE_KEY, JSON.stringify(plotsData));
+
+    // Optimistic bed reassignment — set plotId on every checked bed, clear it
+    // off any bed that was in this plot but is no longer checked (covers both
+    // "removed from this plot" and "moved to a different plot" via a later edit).
+    bedsData.forEach(b => {
+        const isChecked = checkedBeds.includes(String(b.bedNumber));
+        if (isChecked) b.plotId = plotId;
+        else if (String(b.plotId || "") === String(plotId)) b.plotId = "";
+    });
+    saveBeds();
+    queueAction({ action: "assignBedsToPlot", plotId, bedNumbers: checkedBeds });
+
+    renderBeds(bedsData);
+    populateBedDropdown();
+    closePlotAssignModal();
+    showToast(isEdit ? "Plot updated" : "Plot created");
+    processOfflineQueue();
+}
+
+function openPlotDetail(plotId) {
+    currentPlotId = plotId;
+    const plot = getPlot(plotId);
+    document.getElementById("plotDetailTitle").textContent = plot ? plot.name : "Plot";
+
+    const members = bedsInPlot(plotId);
+    const content = document.getElementById("plotDetailContent");
+    content.innerHTML = members.length ? members.map(b => `
+        <div class="bed-detail-row" style="cursor:pointer;" onclick="closePlotDetail(); openBedDetail(${b.bedNumber});">
+            <div class="bed-detail-info">
+                <p class="bed-detail-name">Bed ${escapeHtml(String(b.bedNumber))}${b.name ? " · " + escapeHtml(b.name) : ""}</p>
+                <p class="bed-detail-meta">${b.crops.length} crop${b.crops.length === 1 ? "" : "s"}</p>
+            </div>
+            <span class="bed-chevron">›</span>
+        </div>`).join("") : '<p style="color:#888;padding:12px 0;">No beds assigned yet.</p>';
+
+    document.getElementById("plotDetailOverlay").classList.add("open");
+    document.body.style.overflow = "hidden";
+}
+
+function closePlotDetail() {
+    document.getElementById("plotDetailOverlay").classList.remove("open");
+    document.body.style.overflow = "";
+    currentPlotId = null;
+}
+
+document.getElementById("plotDetailOverlay").addEventListener("click", function (e) {
+    if (e.target === this) closePlotDetail();
+});
+
+function deletePlot() {
+    const plot = getPlot(currentPlotId);
+    if (!plot) return;
+    if (!confirm(`Delete plot "${plot.name}"? Beds keep their own data but leave the plot.`)) return;
+
+    const plotId = currentPlotId;
+    plotsData = plotsData.filter(p => String(p.id) !== String(plotId));
+    localStorage.setItem(PLOTS_CACHE_KEY, JSON.stringify(plotsData));
+    bedsData.forEach(b => { if (String(b.plotId || "") === String(plotId)) b.plotId = ""; });
+    saveBeds();
+
+    queueAction({ action: "deletePlot", id: plotId });
+    renderBeds(bedsData);
+    populateBedDropdown();
+    closePlotDetail();
+    showToast("Plot deleted");
+    processOfflineQueue();
+}
+
+// --- 17. App Initialization ---
 window.addEventListener("online", processOfflineQueue);
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -2046,6 +2402,7 @@ document.addEventListener("DOMContentLoaded", () => {
         fetchBeds();
         fetchFormulas();
         fetchTasks();
+        fetchPlots();
     });
     fetchWeather(); // third-party API, independent of the offline queue/auth gate
 
@@ -2093,6 +2450,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 fetchBeds();
                 fetchLogs();
                 fetchTasks(); // delegation flow: pick up tasks assigned remotely
+                fetchPlots();
             });
             fetchWeather(); // third-party API, independent of the offline queue/auth gate
         }

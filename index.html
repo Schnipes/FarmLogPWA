@@ -66,7 +66,10 @@
       <section aria-label="Active beds">
         <div class="section-header">
           <p class="section-label">Active beds</p>
-          <button class="add-bed-btn" onclick="addBed()">+ Add Bed</button>
+          <div style="display:flex;gap:8px;">
+            <button class="add-bed-btn" onclick="openPlotAssignModal()">+ Plot</button>
+            <button class="add-bed-btn" onclick="addBed()">+ Add Bed</button>
+          </div>
         </div>
         <div id="batchList">
           <p style="color:#888;font-size:14px;padding:8px 4px;">Loading beds...</p>
@@ -227,6 +230,8 @@
           <label for="bedScope">Farm scope</label>
           <select id="bedScope" required>
             <option value="all">Whole Farm</option>
+            <optgroup label="Plots" id="plotScopeGroup"></optgroup>
+            <optgroup label="Beds" id="bedScopeGroup"></optgroup>
           </select>
         </div>
 
@@ -289,12 +294,19 @@
         <div class="bed-detail-title-wrap">
           <h2 id="bedDetailTitle">Bed</h2>
           <button class="bed-rename-btn" onclick="toggleBedRename()" aria-label="Rename bed">✏️</button>
+          <button class="bed-rename-btn" onclick="toggleBedPlotPicker()" aria-label="Assign to plot">🗂️</button>
         </div>
         <button class="modal-close" onclick="closeBedDetail()" aria-label="Close">✕</button>
       </div>
       <div id="bedRenameRow" class="bed-rename-row" hidden>
         <input type="text" id="bedNameInput" placeholder="e.g. Kangkong Row">
         <button class="bed-rename-save-btn" onclick="saveBedName()">Save</button>
+      </div>
+      <div id="bedPlotRow" class="bed-rename-row" hidden>
+        <select id="bedPlotSelect">
+          <option value="">No plot</option>
+        </select>
+        <button class="bed-rename-save-btn" onclick="saveBedPlot()">Save</button>
       </div>
       <div id="bedDetailContent"></div>
       <div class="bed-log-actions">
@@ -420,6 +432,40 @@
 
         <button type="submit" class="submit-btn">Save task</button>
       </form>
+    </div>
+  </div>
+
+  <!-- Plot Create/Edit + Bulk Bed-Assignment Modal -->
+  <div class="modal-overlay" id="plotModalOverlay">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <h2 id="plotModalTitle">New Plot</h2>
+        <button class="modal-close" onclick="closePlotAssignModal()" aria-label="Close">✕</button>
+      </div>
+      <form id="plotForm" onsubmit="handlePlotSubmit(event)" novalidate>
+        <div class="form-field">
+          <label for="plotName">Plot name</label>
+          <input type="text" id="plotName" placeholder="e.g. Eggplant Row" required>
+        </div>
+        <div class="form-field">
+          <label>Beds in this plot</label>
+          <div id="plotBedChecklist"></div>
+        </div>
+        <button type="submit" class="submit-btn" id="plotSubmitBtn">Save plot</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Plot Detail Sheet (view member beds, tap through, edit/delete plot) -->
+  <div class="modal-overlay" id="plotDetailOverlay">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <h2 id="plotDetailTitle">Plot</h2>
+        <button class="modal-close" onclick="closePlotDetail()" aria-label="Close">✕</button>
+      </div>
+      <div id="plotDetailContent"></div>
+      <button class="add-bed-btn" style="width:100%;margin-top:12px;" onclick="openPlotAssignModal(currentPlotId)">✏️ Edit beds in this plot</button>
+      <button class="bed-delete-btn" onclick="deletePlot()">Delete this plot</button>
     </div>
   </div>
 

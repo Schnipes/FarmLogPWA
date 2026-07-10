@@ -747,7 +747,8 @@ textarea {
   margin-bottom: 4px;
 }
 
-.bed-rename-row input {
+.bed-rename-row input,
+.bed-rename-row select {
   flex: 1;
   margin: 0;
 }
